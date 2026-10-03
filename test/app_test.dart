@@ -9,8 +9,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novalith/app/app_model.dart';
+import 'package:novalith/core/bots.dart';
 import 'package:novalith/core/daily.dart';
 import 'package:novalith/core/profile.dart';
+import 'package:novalith/core/rng.dart';
 import 'package:novalith/game/board_game.dart';
 import 'package:novalith/l10n/l10n.dart';
 import 'package:novalith/main.dart';
@@ -525,6 +527,50 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'layout overflow or error in ${lang.code}');
     });
   }
+
+  testWidgets('a long bot-played run renders every frame without errors (and yields screenshots)', (tester) async {
+    final rig = Rig();
+    rig.store.text =
+        (Profile()
+              ..tutorialDone = true
+              ..bestScore = 6000
+              ..rewardLastDate = 20261004
+              ..rewardLastUtcMs = DateTime(2026, 10, 4, 12).toUtc().millisecondsSinceEpoch)
+            .encode();
+    await launch(tester, rig);
+    await tapText(tester, 'PLAY');
+    final game = board(tester);
+    final rng = SeededRng(7);
+    var shotMerge = false;
+    var shotDanger = false;
+    var frame = 0;
+    while (!game.core.over && frame < 20000) {
+      if (game.core.canDrop && frame % 40 == 0) {
+        // Play well for a while, then carelessly, so the run also shows danger and ends.
+        final x = game.core.drops < 70 ? greedyBot(game.core, rng) : 170.0;
+        game.aimX = x;
+        game.release();
+      }
+      final merges = game.core.merges;
+      await tester.pump(const Duration(milliseconds: 16));
+      frame++;
+      if (!shotMerge && game.core.merges > merges && game.core.maxLevel >= 7) {
+        await frames(tester, 4);
+        await shot(tester, 'game_merge');
+        shotMerge = true;
+      }
+      if (!shotDanger && game.core.overflow > 0.5) {
+        await shot(tester, 'game_danger');
+        shotDanger = true;
+      }
+    }
+    expect(game.core.over, isTrue);
+    expect(game.core.drops, greaterThan(40));
+    expect(game.activeParticles, lessThanOrEqualTo(420), reason: 'particle pool is bounded');
+    await seconds(tester, 1.2);
+    expect(find.text('Play again'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('corrupted save on disk: the app still starts and stays usable', (tester) async {
     final rig = Rig();

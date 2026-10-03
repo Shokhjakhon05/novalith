@@ -219,8 +219,8 @@ void paintOrb(Canvas c, String key, double r) {
       _ringHalf(c, r * 0.97, r * 0.3, -0.32, r * 0.11, ring, true);
     case 'dwarf':
       _glow(c, r, 0xA9CCFF, 1.34, 0.6);
-      _sphere(c, r, 0xFFFFFF, 0xDCEBFF, 0x7EA6FF);
-      _shade(c, r, 0.18);
+      _sphere(c, r, 0xFFFFFF, 0xC4DCFF, 0x4F7FE8);
+      _shade(c, r, 0.3);
       _sparkle(c, Offset.zero, r * 1.3, 0.75);
       _gloss(c, r, 0.5);
     case 'sun':

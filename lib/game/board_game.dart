@@ -134,7 +134,7 @@ class BoardGame extends Game {
   void _layout() {
     if (!hasLayout) return;
     final b = core.balance;
-    final availW = size.x - 28;
+    final availW = size.x - 16;
     final availH = size.y - topInset - bottomInset;
     _scale = math.max(0.1, math.min(availW / b.worldW, availH / b.floorY));
     _ox = (size.x - b.worldW * _scale) / 2;
