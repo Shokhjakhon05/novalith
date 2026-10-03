@@ -81,8 +81,8 @@ evidence either way.
 | Requirement | Checked by | Result |
 |---|---|---|
 | Reproducible CI: pinned Flutter 3.47.5, cached, clear failures, artifacts | `.github/workflows/ci.yml` | Pass |
-| Release APK and App Bundle build | CI job "Release APK and App Bundle" | see run below |
-| No debug tools in the release binary | CI step "No debug tooling in the release binary" | see run below |
+| Release APK and App Bundle build | CI job "Release APK and App Bundle" | Pass |
+| No debug tools in the release binary | CI step "No debug tooling in the release binary" | Pass |
 | No placeholder assets or text | all art and audio generated; `l10n_test` rejects empty / TODO strings | Pass |
 | No secrets committed | `.gitignore` (keystores, key.properties); ids via secrets | Pass |
 | Application id, versioning, adaptive icon, splash, R8 | `android/` | Built (look of the icon and splash on a launcher: Not checked) |
@@ -91,4 +91,24 @@ evidence either way.
 
 ## CI run
 
-RUN_PLACEHOLDER
+Run **37154607753** on commit `85fa0e5` - all green:
+https://github.com/Shokhjakhon05/novalith/actions/runs/37154607753
+
+| Step | Result |
+|---|---|
+| `dart format --output=none --set-exit-if-changed .` | Pass |
+| `flutter analyze` | Pass, no issues |
+| `flutter test` with `NOVALITH_GAMES=1000` (128 tests) | Pass |
+| `flutter build apk --release` | Pass - 53.8 MB universal APK (three ABIs) |
+| `flutter build appbundle --release` | Pass - 55.7 MB bundle |
+| Debug panel strings absent from `libapp.so` | Pass |
+
+Checked on the downloaded APK: package `com.novalith.game`; AdMob app id is Google's test id;
+permissions INTERNET, AD_ID and BILLING come from the ads and billing plugins; all 20 audio
+files, the font and the logo are inside; native libraries are aligned for 16 KB pages.
+
+Commits after `85fa0e5` change documentation only.
+
+The artifacts are signed with the **debug key** and use **test ads**, because no keystore or
+ad ids are configured yet (see `RELEASE_STEPS.md`). They install and run, but cannot be
+uploaded to Google Play as they are.
