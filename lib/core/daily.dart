@@ -55,10 +55,10 @@ class DailyChallenge {
       GameCore(balance: balance, seed: seed, adaptiveSpawns: false, dropLimit: dropLimit);
 
   int progress(GameCore core) => switch (type) {
-        DailyType.score => core.score,
-        DailyType.evolution => core.maxLevel,
-        DailyType.chain => core.maxChain,
-      };
+    DailyType.score => core.score,
+    DailyType.evolution => core.maxLevel,
+    DailyType.chain => core.maxChain,
+  };
 
   bool completed(GameCore core) => progress(core) >= target;
 }
@@ -109,12 +109,7 @@ DailyRewardStatus dailyRewardStatus(
 }
 
 /// Claims today's reward. Returns the coins granted, or 0 when nothing was claimable.
-int claimDailyReward(
-  Profile p,
-  DateTime nowLocal,
-  DateTime nowUtc, {
-  Balance balance = Balance.standard,
-}) {
+int claimDailyReward(Profile p, DateTime nowLocal, DateTime nowUtc, {Balance balance = Balance.standard}) {
   final status = dailyRewardStatus(p, nowLocal, nowUtc, balance: balance);
   if (status.state != RewardState.available) return 0;
   p.rewardStreak = status.streakBroken ? 1 : p.rewardStreak + 1;

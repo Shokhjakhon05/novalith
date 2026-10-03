@@ -322,8 +322,8 @@ void main() {
   group('ads policy', () {
     test('interstitial: every N runs, with cooldown, never right after a rewarded ad', () {
       final pacer = InterstitialPacer();
-      bool ask({int runsSince = 3, int total = 10, double now = 1000, bool removeAds = false, bool tut = true}) =>
-          pacer.shouldShow(runsSince: runsSince, totalRuns: total, nowSec: now, removeAds: removeAds, tutorialDone: tut);
+      bool ask({int runsSince = 3, int total = 10, double now = 1000, bool removeAds = false, bool tut = true}) => pacer
+          .shouldShow(runsSince: runsSince, totalRuns: total, nowSec: now, removeAds: removeAds, tutorialDone: tut);
 
       expect(ask(), isTrue);
       expect(ask(runsSince: 2), isFalse);

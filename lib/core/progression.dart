@@ -43,15 +43,15 @@ const List<Achievement> achievements = [
 ];
 
 int statValue(Profile p, Stat s) => switch (s) {
-      Stat.totalMerges => p.totalMerges,
-      Stat.maxChain => p.maxChain,
-      Stat.maxLevel => p.maxLevel,
-      Stat.bestScore => p.bestScore,
-      Stat.runs => p.runs,
-      Stat.dailyCompleted => p.dailyCompleted,
-      Stat.bigBangs => p.bigBangs,
-      Stat.perfects => p.perfects,
-    };
+  Stat.totalMerges => p.totalMerges,
+  Stat.maxChain => p.maxChain,
+  Stat.maxLevel => p.maxLevel,
+  Stat.bestScore => p.bestScore,
+  Stat.runs => p.runs,
+  Stat.dailyCompleted => p.dailyCompleted,
+  Stat.bigBangs => p.bigBangs,
+  Stat.perfects => p.perfects,
+};
 
 enum ItemKind { theme, background }
 
@@ -194,7 +194,8 @@ RunOutcome? applyRun(
   }
   out.discoveries.sort();
 
-  out.xp = core.merges * balance.xpPerMerge +
+  out.xp =
+      core.merges * balance.xpPerMerge +
       (core.score * balance.xpPerScore).floor() +
       balance.xpPerRun +
       (out.dailyCompletedNow ? balance.xpDailyComplete : 0);

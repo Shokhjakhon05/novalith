@@ -22,6 +22,7 @@ class GameEvent {
     this.perfect = false,
     this.speed = 0,
     this.firstTime = false,
+    this.id = 0,
   });
 
   final EventType type;
@@ -37,12 +38,13 @@ class GameEvent {
 
   /// Merge only: this level was created for the first time in this run.
   final bool firstTime;
+
+  /// The body the event is about (the dropped / hit piece, or the newly merged one).
+  final int id;
 }
 
 class Body {
-  Body(this.id, this.level, this.x, this.y, this.r, this.targetR)
-      : px = x,
-        py = y;
+  Body(this.id, this.level, this.x, this.y, this.r, this.targetR) : px = x, py = y;
 
   final int id;
   final int level;
@@ -66,12 +68,8 @@ class Body {
 }
 
 class GameCore {
-  GameCore({
-    this.balance = Balance.standard,
-    required this.seed,
-    bool adaptiveSpawns = true,
-    this.dropLimit = 0,
-  }) : spawner = FairSpawner(balance: balance, seed: seed, adaptive: adaptiveSpawns);
+  GameCore({this.balance = Balance.standard, required this.seed, bool adaptiveSpawns = true, this.dropLimit = 0})
+    : spawner = FairSpawner(balance: balance, seed: seed, adaptive: adaptiveSpawns);
 
   GameCore._restored(this.balance, this.seed, this.dropLimit, this.spawner);
 
@@ -126,8 +124,7 @@ class GameCore {
   int get nextPiece => spawner.next;
   bool get canDrop => !over && cooldown <= 0 && (dropLimit == 0 || drops < dropLimit);
   int get dropsLeft => dropLimit == 0 ? -1 : dropLimit - drops;
-  bool get canContinue =>
-      over && endReason == EndReason.overflow && continuesUsed < balance.continuesPerRun;
+  bool get canContinue => over && endReason == EndReason.overflow && continuesUsed < balance.continuesPerRun;
   int get comboMultiplier => balance.comboMultiplier(chain);
 
   /// Levels created by merges during this run (for the collection / "new discovery").
@@ -159,7 +156,11 @@ class GameCore {
     final onBoard = <int>{for (final b in bodies) b.level};
     final level = spawner.take(onBoard, danger > 0.5);
     final r = balance.radius(level);
-    final cx = x.isFinite ? (x < r ? r : (x > balance.worldW - r ? balance.worldW - r : x)) : balance.worldW / 2;
+    // A sub-pixel, deterministic offset: pieces dropped on exactly the same spot would otherwise
+    // balance in a perfect tower, which no real pile does.
+    final nudge = ((drops * 0.6180339887) % 1 - 0.5) * 0.7;
+    final ax = x.isFinite ? x + nudge : balance.worldW / 2;
+    final cx = ax < r ? r : (ax > balance.worldW - r ? balance.worldW - r : ax);
     var cy = balance.spawnY;
     // Safe spawn: never create a piece inside another one.
     for (var tries = 0; tries < 60 && _overlapsAny(cx, cy, r); tries++) {
@@ -172,7 +173,7 @@ class GameCore {
     _lastDropTime = time;
     // A chain is the reaction to one drop: releasing the next piece starts a new count.
     chain = 0;
-    events.add(GameEvent(EventType.drop, x: cx, y: cy, level: level));
+    events.add(GameEvent(EventType.drop, x: cx, y: cy, level: level, id: body.id));
     return true;
   }
 
@@ -354,7 +355,7 @@ class GameCore {
     _wasPerfect = f.level == other.level && !f.merging && !other.merging;
     a.fresh = false;
     c.fresh = false;
-    events.add(GameEvent(EventType.impact, x: f.x, y: f.y, level: f.level, speed: speed));
+    events.add(GameEvent(EventType.impact, x: f.x, y: f.y, level: f.level, speed: speed, id: f.id));
   }
 
   void _solveWalls(double dt) {
@@ -372,7 +373,7 @@ class GameCore {
         if (o.fresh) {
           o.fresh = false;
           final speed = (o.y - o.py).abs() / dt;
-          events.add(GameEvent(EventType.impact, x: o.x, y: floor, level: o.level, speed: speed));
+          events.add(GameEvent(EventType.impact, x: o.x, y: floor, level: o.level, speed: speed, id: o.id));
         }
         o.y = floor - o.r;
         o.touched = true;
@@ -443,8 +444,19 @@ class GameCore {
         ..py = ny - vy
         ..angle = (a.angle + c.angle) / 2;
       bodies.add(nb);
-      events.add(GameEvent(EventType.merge,
-          x: nx, y: ny, level: lv, chain: chain, points: pts, perfect: m.perfect, firstTime: first));
+      events.add(
+        GameEvent(
+          EventType.merge,
+          x: nx,
+          y: ny,
+          level: lv,
+          chain: chain,
+          points: pts,
+          perfect: m.perfect,
+          firstTime: first,
+          id: nb.id,
+        ),
+      );
     }
     _pending.clear();
     bodies.removeWhere((o) => o.dead);
@@ -523,32 +535,32 @@ class GameCore {
   // --- Persistence of an unfinished run ---
 
   Map<String, dynamic> toJson() => {
-        'seed': seed,
-        'dropLimit': dropLimit,
-        'adaptive': spawner.adaptive,
-        'rng': spawner.rng.state,
-        'cur': spawner.current,
-        'next': spawner.next,
-        'drawn': spawner.drawn,
-        'last': spawner.lastLevel,
-        'runLen': spawner.runLength,
-        'pair': spawner.openingPairDone,
-        'nextId': _nextId,
-        'time': time,
-        'score': score,
-        'drops': drops,
-        'merges': merges,
-        'maxChain': maxChain,
-        'maxLevel': maxLevel,
-        'perfects': perfects,
-        'bigBangs': bigBangs,
-        'bonusCoins': bonusCoins,
-        'continues': continuesUsed,
-        'created': _created.toList(),
-        'bodies': [
-          for (final o in bodies) [o.id, o.level, o.x, o.y, o.r, o.angle],
-        ],
-      };
+    'seed': seed,
+    'dropLimit': dropLimit,
+    'adaptive': spawner.adaptive,
+    'rng': spawner.rng.state,
+    'cur': spawner.current,
+    'next': spawner.next,
+    'drawn': spawner.drawn,
+    'last': spawner.lastLevel,
+    'runLen': spawner.runLength,
+    'pair': spawner.openingPairDone,
+    'nextId': _nextId,
+    'time': time,
+    'score': score,
+    'drops': drops,
+    'merges': merges,
+    'maxChain': maxChain,
+    'maxLevel': maxLevel,
+    'perfects': perfects,
+    'bigBangs': bigBangs,
+    'bonusCoins': bonusCoins,
+    'continues': continuesUsed,
+    'created': _created.toList(),
+    'bodies': [
+      for (final o in bodies) [o.id, o.level, o.x, o.y, o.r, o.angle],
+    ],
+  };
 
   /// Rebuilds a run from [toJson] output. Returns null when the data is unusable - a broken
   /// snapshot must never crash the game, the player simply starts a fresh run.

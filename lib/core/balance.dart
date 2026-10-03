@@ -49,7 +49,7 @@ class Balance {
     this.recoveryBoost = 2.2,
     this.comboWindow = 1.0,
     this.comboMultipliers = const [1, 2, 3, 5, 6, 8],
-    this.perfectBonusFactor = 1.0,
+    this.perfectBonusFactor = 2.0,
     this.overflowTime = 2.0,
     this.dropGrace = 0.5,
     this.continueGrace = 3.0,

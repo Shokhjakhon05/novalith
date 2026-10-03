@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:novalith/core/balance.dart';
 import 'package:novalith/core/bots.dart';
 
-final int games = int.tryParse(Platform.environment['NOVALITH_GAMES'] ?? '') ?? 40;
+final int games = int.tryParse(Platform.environment['NOVALITH_GAMES'] ?? '') ?? 100;
 
 class Row {
   Row(this.name);
@@ -68,11 +68,21 @@ void main() {
       ..writeln()
       ..writeln('| Target | Result | Verdict |')
       ..writeln('|---|---|---|')
-      ..writeln('| Greedy median score >= 2.5x random | ${ratio.toStringAsFixed(2)}x | ${ratio >= 2.5 ? 'pass' : 'FAIL'} |')
-      ..writeln('| Greedy first merge by drop 4 | ${median(greedy.firstMerge)} | ${median(greedy.firstMerge) <= 4 ? 'pass' : 'FAIL'} |')
-      ..writeln('| Random median run 40-90 drops | ${median(random.drops)} | ${median(random.drops) >= 40 && median(random.drops) <= 90 ? 'pass' : 'FAIL'} |')
-      ..writeln('| No run shorter than 15 drops | ${minOf(random.drops)} | ${minOf(random.drops) >= 15 ? 'pass' : 'FAIL'} |')
-      ..writeln('| Every game ends | ${random.unfinished + greedy.unfinished} unfinished | ${random.unfinished + greedy.unfinished == 0 ? 'pass' : 'FAIL'} |');
+      ..writeln(
+        '| Greedy median score >= 2.5x random | ${ratio.toStringAsFixed(2)}x | ${ratio >= 2.5 ? 'pass' : 'FAIL'} |',
+      )
+      ..writeln(
+        '| Greedy first merge by drop 4 | ${median(greedy.firstMerge)} | ${median(greedy.firstMerge) <= 4 ? 'pass' : 'FAIL'} |',
+      )
+      ..writeln(
+        '| Random median run 40-90 drops | ${median(random.drops)} | ${median(random.drops) >= 40 && median(random.drops) <= 90 ? 'pass' : 'FAIL'} |',
+      )
+      ..writeln(
+        '| No run shorter than 15 drops | ${minOf(random.drops)} | ${minOf(random.drops) >= 15 ? 'pass' : 'FAIL'} |',
+      )
+      ..writeln(
+        '| Every game ends | ${random.unfinished + greedy.unfinished} unfinished | ${random.unfinished + greedy.unfinished == 0 ? 'pass' : 'FAIL'} |',
+      );
     // ignore: avoid_print
     print(report);
     if (Platform.environment['NOVALITH_REPORT'] == '1') {

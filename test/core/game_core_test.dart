@@ -244,13 +244,14 @@ void main() {
     expect(GameCore.fromJson({...j, 'score': -5}), isNull);
     expect(GameCore.fromJson({...j, 'bodies': 'x'}), isNull);
     expect(
-        GameCore.fromJson({
-          ...j,
-          'bodies': [
-            [1, 500, 1.0, 1.0, 1.0, 0.0]
-          ]
-        }),
-        isNull);
+      GameCore.fromJson({
+        ...j,
+        'bodies': [
+          [1, 500, 1.0, 1.0, 1.0, 0.0],
+        ],
+      }),
+      isNull,
+    );
     expect(GameCore.fromJson(jsonDecode(jsonEncode(j))), isNotNull);
   });
 
@@ -273,10 +274,12 @@ void main() {
   });
 
   test('a 13th level only needs a new balance entry', () {
-    final extended = Balance(levels: [
-      ...Balance.defaultLevels,
-      const EvoLevel(id: 13, key: 'universe', radius: 104, coins: 30, rarity: 3),
-    ]);
+    const extended = Balance(
+      levels: [
+        ...Balance.defaultLevels,
+        EvoLevel(id: 13, key: 'universe', radius: 104, coins: 30, rarity: 3),
+      ],
+    );
     final c = GameCore(balance: extended, seed: 1);
     final r = extended.radius(12);
     c.debugSpawn(12, 110, extended.floorY - r);

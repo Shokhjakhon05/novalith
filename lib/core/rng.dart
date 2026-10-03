@@ -45,8 +45,7 @@ int hashSeed(String s) {
 ///  * in danger (and only when [adaptive]) pieces that can merge with something on the board
 ///    become more likely.
 class FairSpawner {
-  FairSpawner({required this.balance, required int seed, this.adaptive = true})
-      : rng = SeededRng(seed) {
+  FairSpawner({required this.balance, required int seed, this.adaptive = true}) : rng = SeededRng(seed) {
     current = _draw(const {}, false);
     next = _draw(const {}, false);
   }
@@ -61,12 +60,12 @@ class FairSpawner {
     required int lastLevel,
     required int runLength,
     required bool openingPairDone,
-  })  : rng = SeededRng(0),
-        _drawn = drawn,
-        _last = lastLevel,
-        _run = runLength,
-        _pairDone = openingPairDone {
+  }) : rng = SeededRng(0) {
     rng.state = rngState;
+    _drawn = drawn;
+    _last = lastLevel;
+    _run = runLength;
+    _pairDone = openingPairDone;
   }
 
   final Balance balance;
