@@ -26,8 +26,8 @@ is actually loaded and only for something the player wants (one continue, double
 Interstitials: never in the first two runs, never during play or onboarding, every third run at
 most, at least 120 s apart, never within 60 s of a rewarded ad. "Remove ads" switches them off.
 
-**Engineering - what can still crash, lag or rot?** The game rules are 100% pure Dart with 99
-unit and property tests; every optional subsystem sits behind an interface with guarded calls.
+**Engineering - what can still crash, lag or rot?** The game rules are pure Dart and covered by unit,
+property and stress tests; every optional subsystem sits behind an interface with guarded calls.
 The untested part is the thin layer that talks to real plugins (Google ads, billing, audio),
 which only a device can exercise - open.
 
