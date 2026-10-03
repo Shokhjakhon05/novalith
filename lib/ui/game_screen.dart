@@ -134,6 +134,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _onEvent(GameEvent e) {
     if (_tutorial == 1 && e.type == EventType.drop) setState(() => _tutorial = 2);
+    // Autosave every few drops, so even a killed process loses at most a moment of play.
+    if (e.type == EventType.drop && game.core.drops % 5 == 0) _stashRun();
     if (e.type == EventType.merge) {
       if (_tutorial < 3) {
         setState(() => _tutorial = 3);
@@ -723,7 +725,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     ),
                     const SizedBox(height: 12),
                     _XpBar(model: _model, gained: o.levelsGained),
-                    if (o.discoveries.isNotEmpty) ...[
+                    if (o.discoveries.any((lv) => lv > _model.balance.spawnWeights.length)) ...[
                       const SizedBox(height: 14),
                       Text(
                         _model.t('new_discovery'),
@@ -736,7 +738,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         spacing: 10,
                         runSpacing: 6,
                         children: [
-                          for (final lv in o.discoveries)
+                          for (final lv in o.discoveries.where((lv) => lv > _model.balance.spawnWeights.length))
                             Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [

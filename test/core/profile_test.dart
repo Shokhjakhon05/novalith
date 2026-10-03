@@ -13,7 +13,7 @@ void main() {
     ..bestScore = 98765
     ..owned = {'theme_cosmos', 'bg_deep', 'theme_neon'}
     ..theme = 'theme_neon'
-    ..achievements = {'first_merge'}
+    ..achievements = {'merges_10'}
     ..discovered = {2, 3, 4}
     ..runs = 12
     ..totalMerges = 340

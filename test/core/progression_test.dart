@@ -81,7 +81,7 @@ void main() {
       final p = Profile();
       final out = applyRun(p, finishedRun(merges: 12, maxLevel: 6, chain: 2), runId: 'a')!;
       final ids = out.newAchievements.map((a) => a.id).toSet();
-      expect(ids, containsAll(['first_merge', 'merges_10', 'first_chain', 'evo_6']));
+      expect(ids, containsAll(['merges_10', 'first_chain', 'evo_6']));
       final again = applyRun(p, finishedRun(merges: 1), runId: 'b')!;
       expect(again.newAchievements.where((a) => ids.contains(a.id)), isEmpty);
     });

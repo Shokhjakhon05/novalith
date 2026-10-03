@@ -18,8 +18,7 @@ class Achievement {
 }
 
 const List<Achievement> achievements = [
-  Achievement('first_merge', Stat.totalMerges, 1, 10),
-  Achievement('merges_10', Stat.totalMerges, 10, 15),
+  Achievement('merges_10', Stat.totalMerges, 10, 20),
   Achievement('merges_100', Stat.totalMerges, 100, 40),
   Achievement('merges_1000', Stat.totalMerges, 1000, 150),
   Achievement('merges_5000', Stat.totalMerges, 5000, 400),

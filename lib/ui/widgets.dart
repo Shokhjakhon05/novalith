@@ -418,6 +418,7 @@ void showToast(BuildContext context, String message) {
         content: Text(message, style: ts(15, weight: 600), textAlign: TextAlign.center),
         backgroundColor: const Color(0xF0231A4A),
         behavior: SnackBarBehavior.floating,
+        elevation: 0,
         duration: const Duration(milliseconds: 1800),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),

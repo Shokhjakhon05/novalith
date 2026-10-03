@@ -481,7 +481,8 @@ class GameCore {
     overflow = (worst / b.overflowTime).clamp(0.0, 1.0);
     const zone = 110.0;
     danger = ((b.dangerY + zone - top) / zone).clamp(0.0, 1.0);
-    final inDanger = danger > 0.5;
+    // Hysteresis: a pile hovering around the threshold must not fire the warning repeatedly.
+    final inDanger = _inDanger ? danger > 0.35 : danger > 0.5;
     if (inDanger != _inDanger) {
       _inDanger = inDanger;
       events.add(GameEvent(inDanger ? EventType.dangerEnter : EventType.dangerExit));
