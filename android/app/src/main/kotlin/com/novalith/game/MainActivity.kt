@@ -1,4 +1,4 @@
-package com.novalith.novalith
+package com.novalith.game
 
 import io.flutter.embedding.android.FlutterActivity
 

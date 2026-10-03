@@ -1,0 +1,153 @@
+name: CI - verify, test and build
+
+# Started by hand (Actions tab -> Run workflow, or `gh workflow run ci.yml`). There is
+# deliberately no push trigger: a full run plays thousands of bot games and builds two release
+# binaries, and the repository owner's Actions minutes are not spent on every commit.
+on:
+  workflow_dispatch:
+    inputs:
+      games:
+        description: 'Bot games per stress / balance test'
+        required: true
+        default: '1000'
+      build:
+        description: 'Build the release APK and App Bundle'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.5'
+
+jobs:
+  verify:
+    name: Format, analyze, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Static analysis
+        run: flutter analyze
+
+      - name: Tests (unit, stress, balance, end-to-end)
+        env:
+          NOVALITH_GAMES: ${{ inputs.games }}
+          NOVALITH_REPORT: '1'
+        run: flutter test --reporter expanded
+
+      - name: Upload balance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: balance-report
+          path: docs/BALANCE_REPORT.md
+          if-no-files-found: warn
+          retention-days: 30
+
+  build:
+    name: Release APK and App Bundle
+    needs: verify
+    if: ${{ inputs.build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Optional: with these secrets the binaries are signed with the upload key and use the
+      # production ad ids. Without them the build still succeeds: debug-signed, Google test ads.
+      - name: Release signing (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+            {
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyPassword=$KEY_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "storeFile=../upload-keystore.jks"
+            } > android/key.properties
+            echo "Signing with the upload key."
+          else
+            echo "No keystore secret: signing with the debug key."
+          fi
+
+      - name: Production ad ids (optional)
+        id: ads
+        env:
+          REWARDED_AD_UNIT_ID: ${{ secrets.REWARDED_AD_UNIT_ID }}
+          INTERSTITIAL_AD_UNIT_ID: ${{ secrets.INTERSTITIAL_AD_UNIT_ID }}
+        run: |
+          DEFINES=""
+          if [ -n "$REWARDED_AD_UNIT_ID" ]; then DEFINES="$DEFINES --dart-define=REWARDED_AD_UNIT_ID=$REWARDED_AD_UNIT_ID"; fi
+          if [ -n "$INTERSTITIAL_AD_UNIT_ID" ]; then DEFINES="$DEFINES --dart-define=INTERSTITIAL_AD_UNIT_ID=$INTERSTITIAL_AD_UNIT_ID"; fi
+          echo "defines=$DEFINES" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK
+        env:
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+        run: flutter build apk --release --build-number=${{ github.run_number }} ${{ steps.ads.outputs.defines }}
+
+      - name: Build App Bundle
+        env:
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+        run: flutter build appbundle --release --build-number=${{ github.run_number }} ${{ steps.ads.outputs.defines }}
+
+      - name: No debug tooling in the release binary
+        run: |
+          set -e
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          unzip -o -q "$APK" -d /tmp/apk
+          # Strings that exist only inside the kDebugMode-guarded debug panel.
+          if grep -a -q "Spawn pair" /tmp/apk/lib/*/libapp.so; then
+            echo "Debug panel strings found in the release binary"; exit 1
+          fi
+          echo "Release binary is clean."
+          ls -la build/app/outputs/flutter-apk/ build/app/outputs/bundle/release/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: novalith-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: Upload App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: novalith-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
