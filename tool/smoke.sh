@@ -15,11 +15,11 @@ SIZE=$(adb shell wm size | tr -d '\r' | sed 's/.*: //')
 W=${SIZE%x*}; H=${SIZE#*x}
 tap() { adb shell input tap $(( W * $1 / 100 )) $(( H * $2 / 100 )); }
 
-tap 50 62          # PLAY
+tap 50 75          # PLAY (the big button sits at three quarters of the screen height)
 sleep 4
 adb exec-out screencap -p > smoke/2_game_start.png || true
 for x in 20 22 50 52 80 78 35 36 65 64 50 20; do
-  tap $x 70        # aim and drop in the board
+  tap $x 60        # aim and drop in the board
   sleep 1
 done
 sleep 2
