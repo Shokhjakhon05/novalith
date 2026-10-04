@@ -13,39 +13,58 @@ import '../analytics.dart';
 import 'ad_config.dart';
 import 'ad_manager.dart';
 
+/// Loads and shows the reward ad. Works with either AdMob reward format (see [AdConfig]); the
+/// rest of the game only sees "ready" and "show -> earned or not".
 class RewardedAdService {
-  RewardedAd? _ad;
+  RewardedAd? _rewarded;
+  RewardedInterstitialAd? _rewardedInterstitial;
   bool _loading = false;
   int _failures = 0;
   Timer? _retry;
 
-  bool get ready => _ad != null;
+  bool get ready => _rewarded != null || _rewardedInterstitial != null;
 
   void load() {
-    if (_loading || _ad != null) return;
+    if (_loading || ready) return;
     _loading = true;
-    try {
-      RewardedAd.load(
-        adUnitId: AdConfig.rewardedUnitId,
-        request: const AdRequest(),
-        rewardedAdLoadCallback: RewardedAdLoadCallback(
-          onAdLoaded: (ad) {
-            _ad = ad;
-            _loading = false;
-            _failures = 0;
-          },
-          onAdFailedToLoad: (error) {
-            _loading = false;
-            _scheduleRetry();
-          },
-        ),
-      ).catchError((_) {
-        _loading = false;
-        _scheduleRetry();
-      });
-    } catch (_) {
+    void failed() {
       _loading = false;
       _scheduleRetry();
+    }
+
+    void loaded() {
+      _loading = false;
+      _failures = 0;
+    }
+
+    try {
+      if (AdConfig.rewardedIsInterstitial) {
+        RewardedInterstitialAd.load(
+          adUnitId: AdConfig.rewardedUnitId,
+          request: const AdRequest(),
+          rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
+            onAdLoaded: (ad) {
+              _rewardedInterstitial = ad;
+              loaded();
+            },
+            onAdFailedToLoad: (error) => failed(),
+          ),
+        ).catchError((_) => failed());
+      } else {
+        RewardedAd.load(
+          adUnitId: AdConfig.rewardedUnitId,
+          request: const AdRequest(),
+          rewardedAdLoadCallback: RewardedAdLoadCallback(
+            onAdLoaded: (ad) {
+              _rewarded = ad;
+              loaded();
+            },
+            onAdFailedToLoad: (error) => failed(),
+          ),
+        ).catchError((_) => failed());
+      }
+    } catch (_) {
+      failed();
     }
   }
 
@@ -59,9 +78,11 @@ class RewardedAdService {
 
   /// Completes exactly once: true if the reward callback fired before the ad closed.
   Future<bool> show() {
-    final ad = _ad;
-    if (ad == null) return Future.value(false);
-    _ad = null;
+    final rewarded = _rewarded;
+    final interstitial = _rewardedInterstitial;
+    if (rewarded == null && interstitial == null) return Future.value(false);
+    _rewarded = null;
+    _rewardedInterstitial = null;
     final done = Completer<bool>();
     var earned = false;
     void finish() {
@@ -69,18 +90,32 @@ class RewardedAdService {
       load();
     }
 
-    ad.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) {
-        ad.dispose();
-        finish();
-      },
-      onAdFailedToShowFullScreenContent: (ad, error) {
-        ad.dispose();
-        finish();
-      },
-    );
     try {
-      ad.show(onUserEarnedReward: (_, _) => earned = true).catchError((_) => finish());
+      if (interstitial != null) {
+        interstitial.fullScreenContentCallback = FullScreenContentCallback(
+          onAdDismissedFullScreenContent: (ad) {
+            ad.dispose();
+            finish();
+          },
+          onAdFailedToShowFullScreenContent: (ad, error) {
+            ad.dispose();
+            finish();
+          },
+        );
+        interstitial.show(onUserEarnedReward: (_, _) => earned = true).catchError((_) => finish());
+      } else {
+        rewarded!.fullScreenContentCallback = FullScreenContentCallback(
+          onAdDismissedFullScreenContent: (ad) {
+            ad.dispose();
+            finish();
+          },
+          onAdFailedToShowFullScreenContent: (ad, error) {
+            ad.dispose();
+            finish();
+          },
+        );
+        rewarded.show(onUserEarnedReward: (_, _) => earned = true).catchError((_) => finish());
+      }
     } catch (_) {
       finish();
     }

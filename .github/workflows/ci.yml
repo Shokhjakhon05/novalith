@@ -151,3 +151,43 @@ jobs:
           name: novalith-release-aab
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
+
+  smoke:
+    name: Launch the release APK on an emulator
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: novalith-release-apk
+          path: apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # A build that compiles is not a build that starts: this installs the very APK that
+      # was just built, launches it and fails if the process is gone after 30 seconds.
+      - name: Install, launch, check it stays alive
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash tool/smoke.sh
+
+      - name: Upload logcat and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-result
+          path: smoke/
+          retention-days: 14
