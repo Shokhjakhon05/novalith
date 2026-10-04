@@ -314,7 +314,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   /// Result screen -> the following campaign level, without going back to the map.
   Future<void> _nextLevel() async {
     final next = _level == null ? null : nextLevel(_level!.id);
-    if (next == null || !_model.unlocked(next)) return;
+    // Checked before the level is switched: a second tap while the first is still being
+    // handled must not move on twice.
+    if (_busy || next == null || !_model.unlocked(next)) return;
     _level = next;
     _master = false;
     await _playAgain();
