@@ -41,12 +41,15 @@ TextStyle ts(double size, {int weight = 600, Color color = Palette.text, double?
 
 /// The static space backdrop behind menus.
 class SpaceBackdrop extends StatelessWidget {
-  const SpaceBackdrop({super.key, required this.child});
+  const SpaceBackdrop({super.key, required this.child, this.background});
   final Widget child;
+
+  /// Null = the backdrop the player has equipped.
+  final String? background;
 
   @override
   Widget build(BuildContext context) {
-    final id = AppScope.of(context).profile.background;
+    final id = background ?? AppScope.of(context).profile.background;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -68,38 +71,25 @@ class _BackdropPainter extends CustomPainter {
   bool shouldRepaint(_BackdropPainter old) => old.id != id;
 }
 
-/// A celestial body drawn straight from its recipe (used in menus, shop and collection).
-class OrbView extends StatelessWidget {
-  const OrbView({super.key, required this.level, required this.size, this.theme, this.locked = false});
-  final int level;
-  final double size;
-  final String? theme;
-  final bool locked;
+/// Baked pictures of the celestial bodies for menus, shop, collection and the map. A recipe is
+/// rasterised once and then drawn as a plain image: painting the recipes live on every frame
+/// (hundreds of blurred shapes each) is what froze the collection screen on phones.
+class OrbImages {
+  static const int _px = 256;
+  static const int _capacity = 48;
+  static final Map<String, ui.Image> _cache = {};
 
-  @override
-  Widget build(BuildContext context) {
-    final model = AppScope.of(context);
-    return RepaintBoundary(
-      child: CustomPaint(
-        size: Size.square(size),
-        painter: _OrbPainter(model.balance.level(level), theme ?? model.profile.theme, locked),
-      ),
-    );
-  }
-}
+  static ui.Image get(EvoLevel level, String theme, bool locked) {
+    final key = locked ? '${level.key}|locked' : '${level.key}|$theme';
+    final hit = _cache.remove(key);
+    if (hit != null) return _cache[key] = hit;
+    if (_cache.length >= _capacity) _cache.remove(_cache.keys.first)?.dispose();
 
-class _OrbPainter extends CustomPainter {
-  _OrbPainter(this.level, this.theme, this.locked);
-  final EvoLevel level;
-  final String theme;
-  final bool locked;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = size.width / 2 / orbBleed;
-    canvas.save();
-    canvas.translate(size.width / 2, size.height / 2);
-    final bounds = Rect.fromCircle(center: Offset.zero, radius: size.width / 2);
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec);
+    final r = _px / 2 / orbBleed;
+    canvas.translate(_px / 2, _px / 2);
+    final bounds = Rect.fromCircle(center: Offset.zero, radius: _px / 2);
     if (locked) {
       // Undiscovered: a dark silhouette.
       canvas.saveLayer(
@@ -127,7 +117,47 @@ class _OrbPainter extends CustomPainter {
         );
       }
     }
-    canvas.restore();
+    return _cache[key] = rec.endRecording().toImageSync(_px, _px);
+  }
+}
+
+/// A celestial body (used in menus, shop, collection and the map).
+class OrbView extends StatelessWidget {
+  const OrbView({super.key, required this.level, required this.size, this.theme, this.locked = false});
+  final int level;
+  final double size;
+  final String? theme;
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    final model = AppScope.of(context);
+    return RepaintBoundary(
+      child: CustomPaint(
+        size: Size.square(size),
+        painter: _OrbPainter(model.balance.level(level), theme ?? model.profile.theme, locked),
+      ),
+    );
+  }
+}
+
+class _OrbPainter extends CustomPainter {
+  _OrbPainter(this.level, this.theme, this.locked);
+  final EvoLevel level;
+  final String theme;
+  final bool locked;
+
+  static final Paint _paint = Paint()..filterQuality = FilterQuality.medium;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final img = OrbImages.get(level, theme, locked);
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      Offset.zero & size,
+      _paint,
+    );
   }
 
   @override
@@ -366,10 +396,11 @@ String formatNumber(int n) {
 
 /// Screen scaffold used by every secondary screen: backdrop, back button, title, coins.
 class GameScaffold extends StatelessWidget {
-  const GameScaffold({super.key, required this.title, required this.child, this.showCoins = true});
+  const GameScaffold({super.key, required this.title, required this.child, this.showCoins = true, this.background});
   final String title;
   final Widget child;
   final bool showCoins;
+  final String? background;
 
   @override
   Widget build(BuildContext context) {
@@ -377,6 +408,7 @@ class GameScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: Palette.ink,
       body: SpaceBackdrop(
+        background: background,
         child: SafeArea(
           child: Column(
             children: [

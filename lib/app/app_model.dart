@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../core/balance.dart';
+import '../core/campaign.dart';
 import '../core/daily.dart';
 import '../core/game_core.dart';
 import '../core/profile.dart';
@@ -54,6 +55,7 @@ class AppModel extends ChangeNotifier {
     profile = result.profile;
     loadStatus = result.status;
     grantLevelItems(profile);
+    syncCalendar(profile, now);
     _applySettings();
     purchases.onRemoveAdsOwned = _onRemoveAdsOwned;
     loaded = true;
@@ -72,6 +74,13 @@ class AppModel extends ChangeNotifier {
   bool get rtl => l10n.language.rtl;
 
   String evoName(int level) => t('evo_${balance.level(level).key}');
+
+  /// The spawnable pieces are known from the first drop; the rest must be created by merging.
+  bool evoFound(int id) => id <= balance.spawnWeights.length
+      ? profile.runs > 0 || profile.discovered.isNotEmpty
+      : profile.discovered.contains(id);
+
+  int get collectionCount => balance.levels.where((l) => evoFound(l.id)).length;
 
   Future<void> save() => store.save(profile);
 
@@ -160,6 +169,57 @@ class AppModel extends ChangeNotifier {
     return coins;
   }
 
+  // --- Campaign ---
+
+  /// The level "Continue" leads to; null once every level is completed.
+  LevelDef? get nextCampaignLevel => currentLevel(profile);
+
+  bool unlocked(LevelDef level) => levelUnlocked(profile, level);
+
+  /// Starts an attempt. The piece sequence rotates with every attempt, and repeated failures
+  /// add a few drops.
+  GameCore startLevel(LevelDef level, {bool master = false}) {
+    analytics.log(master ? 'master_started' : 'campaign_level_started', {'level': level.id});
+    return level.createRun(
+      balance: balance,
+      attempt: profile.attempts,
+      master: master,
+      fails: profile.fails[level.id] ?? 0,
+    );
+  }
+
+  String worldName(int world) => t('world_${worldDef(world).key}');
+
+  /// The name of a shop item; a world's prize backdrop carries the world's name.
+  String itemName(ShopItem item) => item.reqWorld > 0 ? worldName(item.reqWorld) : t(item.id);
+
+  // --- Weekly goals, monthly archive, gift ---
+
+  List<WeeklyGoal> get weekGoals {
+    syncCalendar(profile, now);
+    return weeklyGoals(profile);
+  }
+
+  /// True when something on the goals screen is waiting to be collected.
+  bool get goalsClaimable =>
+      weekGoals.any((g) => !profile.weekClaimed.contains(g.id) && weeklyProgress(profile, g) >= g.target) ||
+      (!profile.monthClaimed && profile.monthPoints >= monthlyTarget);
+
+  int claimWeeklyGoal(String id) => _paid(claimWeekly(profile, id), 'weekly_goal_claimed');
+
+  int claimMonthlyReward() => _paid(claimMonthly(profile), 'monthly_claimed');
+
+  int takeGift() => _paid(claimGift(profile), 'gift_claimed');
+
+  int _paid(int coins, String event) {
+    if (coins > 0) {
+      analytics.log(event);
+      audio.play(Sfx.coin);
+      _changed();
+    }
+    return coins;
+  }
+
   // --- Runs ---
 
   /// Keeps an unfinished classic run so the player can come back to it after the app is closed.
@@ -176,12 +236,33 @@ class AppModel extends ChangeNotifier {
     return GameCore.fromJson(raw, balance: balance);
   }
 
-  RunOutcome? finishRun(GameCore core, String runId, {DailyChallenge? daily}) {
-    final outcome = applyRun(profile, core, runId: runId, daily: daily, balance: balance);
+  RunOutcome? finishRun(GameCore core, String runId, {DailyChallenge? daily, LevelDef? level, bool master = false}) {
+    final outcome = applyRun(
+      profile,
+      core,
+      runId: runId,
+      daily: daily,
+      level: level,
+      master: master,
+      now: now,
+      balance: balance,
+    );
     if (outcome == null) return null;
-    profile.activeRun = null;
+    // A campaign level never touches the unfinished classic run that may be waiting.
+    if (level == null) profile.activeRun = null;
     analytics.log('game_over', {'score': core.score, 'drops': core.drops, 'daily': daily != null});
     if (outcome.dailyCompletedNow) analytics.log('daily_completed');
+    if (level != null) {
+      final info = {'level': level.id, 'score': core.score, 'drops': core.drops};
+      if (master) {
+        if (outcome.masterNow) analytics.log('master_completed', info);
+      } else {
+        analytics.log(outcome.passed ? 'campaign_level_completed' : 'campaign_level_failed', info);
+        if (outcome.newStars > 0) analytics.log('star_earned', {'level': level.id, 'stars': outcome.stars});
+        if (outcome.newStars > 0 && outcome.stars == 3) analytics.log('three_star_earned', {'level': level.id});
+        if (outcome.worldDone > 0) analytics.log('world_unlocked', {'world': outcome.worldDone + 1});
+      }
+    }
     _changed();
     return outcome;
   }

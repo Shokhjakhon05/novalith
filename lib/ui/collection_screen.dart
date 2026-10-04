@@ -4,7 +4,9 @@ library;
 import 'package:flutter/material.dart';
 
 import '../app/app_model.dart';
+import '../core/campaign.dart';
 import '../core/progression.dart';
+import 'campaign_widgets.dart';
 import 'game_screen.dart' show achievementText;
 import 'widgets.dart';
 
@@ -15,11 +17,8 @@ class CollectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final model = AppScope.of(context);
     final levels = model.balance.levels;
-    // The spawnable pieces are known from the first drop; the rest must be created by merging.
-    bool found(int id) => id <= model.balance.spawnWeights.length
-        ? model.profile.runs > 0 || model.profile.discovered.isNotEmpty
-        : model.profile.discovered.contains(id);
-    final count = levels.where((l) => found(l.id)).length;
+    final found = model.evoFound;
+    final count = model.collectionCount;
     return GameScaffold(
       title: model.t('collection'),
       showCoins: false,
@@ -42,6 +41,23 @@ class CollectionScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text('$count / ${levels.length}', style: ts(16, weight: 800, color: Palette.cyan)),
+              ],
+            ),
+          ),
+          // World badges: silver for a completed world, with a diamond once every master
+          // challenge in it is done.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                for (final w in worlds)
+                  Expanded(
+                    child: _WorldBadge(
+                      world: w,
+                      done: worldCompleted(model.profile, w.id),
+                      mastered: worldLevels(w.id).every((l) => model.profile.levels[l.id]?.master ?? false),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -84,6 +100,52 @@ class CollectionScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _WorldBadge extends StatelessWidget {
+  const _WorldBadge({required this.world, required this.done, required this.mastered});
+  final WorldDef world;
+  final bool done;
+  final bool mastered;
+
+  @override
+  Widget build(BuildContext context) {
+    final model = AppScope.of(context);
+    final accent = worldColor(world.id);
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: done ? accent.withValues(alpha: 0.25) : const Color(0x14FFFFFF),
+                border: Border.all(color: done ? accent : const Color(0x33FFFFFF), width: done ? 2 : 1),
+              ),
+              child: Icon(
+                done ? Icons.public_rounded : Icons.lock_rounded,
+                color: done ? accent : Palette.faint,
+                size: done ? 26 : 18,
+              ),
+            ),
+            if (mastered) const Icon(Icons.diamond_rounded, size: 16, color: Palette.cyan),
+          ],
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            model.worldName(world.id),
+            maxLines: 1,
+            style: ts(10.5, weight: 600, color: done ? Palette.dim : Palette.faint),
+          ),
+        ),
+      ],
     );
   }
 }

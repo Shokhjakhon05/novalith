@@ -76,6 +76,9 @@ class BoardGame extends Game {
   final ValueNotifier<int> dropsLeft = ValueNotifier(-1);
 
   bool showStats = false;
+
+  /// Campaign levels play against their world's sky instead of the equipped backdrop.
+  String? backgroundOverride;
   double aimX = 170;
 
   double _scale = 1;
@@ -305,6 +308,10 @@ class BoardGame extends Game {
         if (core.endReason == EndReason.overflow) {
           audio.play(Sfx.gameover);
           haptics.fire(Haptic.gameOver);
+        } else if (core.endReason == EndReason.completed) {
+          _rings.add(_Ring(core.balance.worldW / 2, core.balance.floorY / 2, 30, 360, 0.7, 0xFFD65A));
+          audio.play(Sfx.record);
+          haptics.fire(Haptic.bigMerge);
         }
       case EventType.continued:
         _endTimer = -1;
@@ -446,7 +453,7 @@ class BoardGame extends Game {
   }
 
   void _drawBackground(Canvas canvas, Size screen) {
-    final id = model.profile.background;
+    final id = backgroundOverride ?? model.profile.background;
     if (_bg == null || _bgId != id || _bgSize != screen) {
       _bg?.dispose();
       final rec = ui.PictureRecorder();

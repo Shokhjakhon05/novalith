@@ -114,7 +114,7 @@ class _ItemCard extends StatelessWidget {
     final p = model.profile;
     final owned = p.owned.contains(item.id);
     final equipped = p.theme == item.id || p.background == item.id;
-    final levelLocked = !owned && item.reqLevel > 0;
+    final levelLocked = !owned && item.earned;
     final rarity = Palette.rarity[item.rarity.clamp(0, 3)];
 
     Widget action;
@@ -142,7 +142,11 @@ class _ItemCard extends StatelessWidget {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              model.t('unlock_level', {'n': item.reqLevel}),
+              item.reqWorld > 0
+                  ? model.t('unlock_world', {'name': model.worldName(item.reqWorld)})
+                  : item.archive
+                  ? model.t('unlock_archive')
+                  : model.t('unlock_level', {'n': item.reqLevel}),
               style: ts(12, weight: 600, color: Palette.dim),
               textAlign: TextAlign.center,
               maxLines: 2,
@@ -191,7 +195,7 @@ class _ItemCard extends StatelessWidget {
           const SizedBox(height: 8),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(model.t(item.id), style: ts(16, weight: 700, color: rarity)),
+            child: Text(model.itemName(item), style: ts(16, weight: 700, color: rarity)),
           ),
           const SizedBox(height: 8),
           SizedBox(height: 48, child: Center(child: action)),

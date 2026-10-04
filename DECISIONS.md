@@ -24,3 +24,14 @@ Short record of the choices made where the brief left room, and why.
 | 18 | **Cosmetics: two categories** (body themes, backgrounds), 12 items. Trails and merge effects were dropped. | Scope cut in favour of core polish, as the brief allows. |
 | 19 | **"Remove ads" removes interstitials only.** | Rewarded ads are the player's own choice and give them something. |
 | 20 | **The record is always visible in the HUD as a progress bar.** | The cheapest honest "one more run" hook: you see how close you are. |
+| 21 | **Menu orbs are baked images, never live recipes.** | Painting recipes each frame froze and killed the collection screen on a real GPU; an image costs one draw. |
+| 22 | **Campaign: 100 levels (5 x 20), not 150.** | Each level differs from its neighbour in goal or conditions; a test enforces it. |
+| 23 | **Level numbers are produced by a generator and proven by the bot.** Hand-typed thresholds are not allowed. | "Fair" has to be checkable: every sequence a player can be dealt was finished by the bot, and three stars were actually reached. |
+| 24 | **Two star metrics.** Score levels play all drops and are rated by score; goal levels end at the goal and are rated by drops used. | The metric fits the level; an instant win on the goal is the best moment of a short level. |
+| 25 | **A level rotates through four piece sequences and adds drops after three failures.** | Nobody stays stuck on one bad deal; no skip button, no paid help. |
+| 26 | **Master challenge instead of difficulty tiers:** lower line, other sequences, tighter target; where the bot cannot live with the lower line the challenge keeps the level's line. | One extra layer of replay per level without tripling the content. |
+| 27 | **Unlocks are derived from level records, not stored.** | A damaged or edited save cannot open a level out of order. |
+| 28 | **Campaign runs do not touch the classic record or the unfinished classic run.** | The endless mode stays exactly what it was. |
+| 29 | **Weekly goals and the monthly archive are local and optional;** a clock set back changes nothing. | No server, no fake competition, no timers that block play. |
+| 30 | **Player level (XP) is shown as a badge with a number;** the word "level" belongs to the campaign. | Two different "levels" on one screen were confusing. |
+| 31 | **Campaign levels play on their world's backdrop;** the equipped one stays for endless and daily. Finishing a world gives its backdrop to the player. | Worlds need their own sky; bought cosmetics keep their place. |

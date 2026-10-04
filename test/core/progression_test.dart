@@ -142,7 +142,7 @@ void main() {
     test('catalogue is sane: unique ids, defaults are free, prices positive', () {
       expect(shopItems.map((i) => i.id).toSet().length, shopItems.length);
       for (final i in shopItems) {
-        if (i.id == 'theme_cosmos' || i.id == 'bg_deep' || i.reqLevel > 0) {
+        if (i.id == 'theme_cosmos' || i.id == 'bg_deep' || i.earned) {
           expect(i.price, 0);
         } else {
           expect(i.price, greaterThan(0));

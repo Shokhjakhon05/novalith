@@ -22,12 +22,43 @@ class LoadResult {
 /// Upgrades a raw save from version N to N+1.
 typedef Migration = Map<String, dynamic> Function(Map<String, dynamic> old);
 
+/// What the player has achieved on one campaign level.
+class LevelRecord {
+  LevelRecord({this.stars = 0, this.best = 0, this.chain = 0, this.fewest = 0, this.master = false});
+
+  /// 0 = not completed yet.
+  int stars;
+  int best;
+  int chain;
+
+  /// Fewest drops the goal was reached in; 0 = never.
+  int fewest;
+  bool master;
+
+  List<int> toJson() => [stars, best, chain, fewest, master ? 1 : 0];
+}
+
+/// Version 1 -> 2: the campaign arrives. Nothing is taken away; a player who already played
+/// gets a one-time thank-you gift sized by what they had achieved.
+Map<String, dynamic> _addCampaign(Map<String, dynamic> old) {
+  final out = Map<String, dynamic>.from(old);
+  final stats = old['stats'];
+  final runs = stats is Map && stats['runs'] is num ? (stats['runs'] as num).toInt() : 0;
+  if (runs > 0) {
+    final done = old['achievements'] is List ? (old['achievements'] as List).length : 0;
+    final best = old['bestScore'] is num ? (old['bestScore'] as num).toInt() : 0;
+    out['gift'] = (50 + 10 * done + best ~/ 400).clamp(50, 600);
+  }
+  out['campaign'] = <String, dynamic>{};
+  return out;
+}
+
 class Profile {
   /// Bump when the layout changes and add the matching entry to [migrations].
-  static const int currentVersion = 1;
+  static const int currentVersion = 2;
 
-  /// version N -> function producing version N+1. Empty today: version 1 is the first layout.
-  static const Map<int, Migration> migrations = {};
+  /// version N -> function producing version N+1.
+  static const Map<int, Migration> migrations = {1: _addCampaign};
 
   int coins = 0;
   int xp = 0;
@@ -86,6 +117,35 @@ class Profile {
   /// Snapshot of an unfinished classic run (see GameCore.toJson), or null.
   Map<String, dynamic>? activeRun;
 
+  // Campaign: level id -> record. What is unlocked is derived from this, never stored.
+  Map<int, LevelRecord> levels = {};
+
+  /// Failed attempts in a row per level (drives the extra-drops assist).
+  Map<int, int> fails = {};
+
+  /// Counts campaign attempts; picks which of a level's piece sequences comes next.
+  int attempts = 0;
+
+  // Weekly personal goals.
+  int weekKey = 0;
+  Map<String, int> weekProgress = {};
+  Set<String> weekClaimed = {};
+  int weekliesClaimed = 0;
+
+  // Monthly archive.
+  int monthKey = 0;
+  int monthPoints = 0;
+  bool monthClaimed = false;
+
+  /// Coins waiting to be handed over with a message (the gift for players from before the
+  /// campaign update).
+  int gift = 0;
+
+  int starsOf(int levelId) => levels[levelId]?.stars ?? 0;
+  int get totalStars => levels.values.fold(0, (a, r) => a + r.stars);
+  int get levelsDone => levels.values.where((r) => r.stars > 0).length;
+  int get mastersDone => levels.values.where((r) => r.master).length;
+
   Map<String, dynamic> toJson() => {
     'v': currentVersion,
     'coins': coins,
@@ -117,6 +177,14 @@ class Profile {
     'lastRunCoins': lastRunCoins,
     'runsSinceInterstitial': runsSinceInterstitial,
     'activeRun': activeRun,
+    'campaign': {
+      'levels': {for (final e in levels.entries) '${e.key}': e.value.toJson()},
+      'fails': {for (final e in fails.entries) '${e.key}': e.value},
+      'attempts': attempts,
+    },
+    'weekly': {'week': weekKey, 'progress': weekProgress, 'claimed': weekClaimed.toList(), 'total': weekliesClaimed},
+    'monthly': {'month': monthKey, 'points': monthPoints, 'claimed': monthClaimed},
+    'gift': gift,
   };
 
   String encode() => jsonEncode(toJson());
@@ -220,7 +288,70 @@ class Profile {
       r.damaged = true;
     }
 
-    final bad = damaged || r.damaged || s.damaged || d.damaged || w.damaged || t.damaged;
+    final c = r.child('campaign');
+    final rawLevels = c.map['levels'];
+    if (rawLevels is Map) {
+      for (final e in rawLevels.entries) {
+        final id = int.tryParse('${e.key}');
+        final v = e.value;
+        if (id == null || id < 101 || id > 9999 || v is! List || v.length < 5 || v.any((x) => x is! int || x < 0)) {
+          c.damaged = true;
+          continue;
+        }
+        final stars = v[0] as int;
+        if (stars > 3) {
+          c.damaged = true;
+          continue;
+        }
+        // A master mark without a completed level cannot be earned: drop it.
+        p.levels[id] = LevelRecord(
+          stars: stars,
+          best: v[1] as int,
+          chain: v[2] as int,
+          fewest: v[3] as int,
+          master: v[4] == 1 && stars > 0,
+        );
+      }
+    } else if (rawLevels != null) {
+      c.damaged = true;
+    }
+    final rawFails = c.map['fails'];
+    if (rawFails is Map) {
+      for (final e in rawFails.entries) {
+        final id = int.tryParse('${e.key}');
+        if (id != null && e.value is int && (e.value as int) > 0) p.fails[id] = (e.value as int).clamp(0, 99);
+      }
+    }
+    p.attempts = c.integer('attempts', 0);
+
+    final k = r.child('weekly');
+    p.weekKey = k.integer('week', 0);
+    final rawProgress = k.map['progress'];
+    if (rawProgress is Map) {
+      for (final e in rawProgress.entries) {
+        final v = e.value;
+        if (e.key is String && v is int && v >= 0) p.weekProgress[e.key as String] = v;
+      }
+    }
+    p.weekClaimed = k.strings('claimed');
+    p.weekliesClaimed = k.integer('total', 0);
+
+    final mo = r.child('monthly');
+    p.monthKey = mo.integer('month', 0);
+    p.monthPoints = mo.integer('points', 0);
+    p.monthClaimed = mo.boolean('claimed', false);
+    p.gift = r.integer('gift', 0, max: 100000);
+
+    final bad =
+        damaged ||
+        r.damaged ||
+        s.damaged ||
+        d.damaged ||
+        w.damaged ||
+        t.damaged ||
+        c.damaged ||
+        k.damaged ||
+        mo.damaged;
     return LoadResult(p, bad ? LoadStatus.recovered : LoadStatus.ok);
   }
 }

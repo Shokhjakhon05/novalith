@@ -156,6 +156,55 @@ class Balance {
 
   final List<EvoLevel> levels;
 
+  /// The same rules with a different piece mix and/or overflow line (campaign levels use this).
+  Balance tuned({List<int>? spawnWeights, double? dangerY}) => Balance(
+    worldW: worldW,
+    floorY: floorY,
+    dangerY: dangerY ?? this.dangerY,
+    spawnY: spawnY,
+    gravity: gravity,
+    stepDt: stepDt,
+    maxStepsPerFrame: maxStepsPerFrame,
+    solverIterations: solverIterations,
+    maxSpeed: maxSpeed,
+    contactDamping: contactDamping,
+    airDamping: airDamping,
+    friction: friction,
+    growTime: growTime,
+    dropCooldown: dropCooldown,
+    spawnWeights: spawnWeights ?? this.spawnWeights,
+    maxSameInRow: maxSameInRow,
+    openingPairWithin: openingPairWithin,
+    recoveryBoost: recoveryBoost,
+    comboWindow: comboWindow,
+    comboMultipliers: comboMultipliers,
+    perfectBonusFactor: perfectBonusFactor,
+    overflowTime: overflowTime,
+    dropGrace: dropGrace,
+    continueGrace: continueGrace,
+    continuesPerRun: continuesPerRun,
+    continueClearMaxLevel: continueClearMaxLevel,
+    bigBangScore: bigBangScore,
+    bigBangCoins: bigBangCoins,
+    bigBangImpulse: bigBangImpulse,
+    pointsPerCoin: pointsPerCoin,
+    recordBonusCoins: recordBonusCoins,
+    comboCoinFrom: comboCoinFrom,
+    xpPerMerge: xpPerMerge,
+    xpPerScore: xpPerScore,
+    xpPerRun: xpPerRun,
+    xpDailyComplete: xpDailyComplete,
+    levelUpCoins: levelUpCoins,
+    interstitialEveryRuns: interstitialEveryRuns,
+    interstitialCooldownSec: interstitialCooldownSec,
+    interstitialAfterRewardedSec: interstitialAfterRewardedSec,
+    interstitialSkipFirstRuns: interstitialSkipFirstRuns,
+    dailyRewardCoins: dailyRewardCoins,
+    dailyCompleteCoins: dailyCompleteCoins,
+    settleSpeed: settleSpeed,
+    levels: levels,
+  );
+
   int get maxLevel => levels.length;
   EvoLevel level(int id) => levels[id - 1];
   double radius(int id) => levels[id - 1].radius;

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novalith/core/balance.dart';
+import 'package:novalith/core/campaign.dart';
 import 'package:novalith/core/progression.dart';
 import 'package:novalith/l10n/l10n.dart';
 import 'package:novalith/l10n/lang_en.dart';
@@ -32,7 +33,11 @@ void main() {
       expect(en.containsKey('evo_${l.key}'), isTrue, reason: l.key);
     }
     for (final i in shopItems) {
-      expect(en.containsKey(i.id), isTrue, reason: i.id);
+      // A world's prize backdrop is named after its world.
+      if (i.reqWorld == 0) expect(en.containsKey(i.id), isTrue, reason: i.id);
+    }
+    for (final w in worlds) {
+      expect(en.containsKey('world_${w.key}'), isTrue, reason: w.key);
     }
   });
 

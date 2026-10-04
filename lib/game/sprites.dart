@@ -349,9 +349,9 @@ void paintOrb(Canvas c, String key, double r) {
       c.save();
       _clipCircle(c, r);
       final rnd = math.Random(120);
-      final star = Paint()
-        ..blendMode = BlendMode.plus
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.008);
+      // No blur here: 840 blurred circles are 840 offscreen GPU passes, which is what froze
+      // and killed the collection screen on real devices. At this size the blur was invisible.
+      final star = Paint()..blendMode = BlendMode.plus;
       for (var arm = 0; arm < 2; arm++) {
         for (var i = 0; i < 420; i++) {
           final t = i / 420;
@@ -504,6 +504,13 @@ final Map<String, OrbTheme> orbThemes = {
     0,
   ], 0xFF6A2B),
   'theme_aurora': OrbTheme('theme_aurora', _hueRotate(118), 0x58F0C0),
+  // The monthly archive prize: everything cast in gold.
+  'theme_archive': const OrbTheme(
+    'theme_archive',
+    [0.62, 0.52, 0.10, 0, 26, 0.44, 0.44, 0.08, 0, 10, 0.10, 0.16, 0.10, 0, 0, 0, 0, 0, 1, 0],
+    0xFFD65A,
+    outline: true,
+  ),
   'theme_void': const OrbTheme(
     'theme_void',
     [0.36, 0.72, 0.10, 0, 6, 0.26, 0.62, 0.08, 0, 0, 0.44, 0.80, 0.16, 0, 22, 0, 0, 0, 1, 0],
@@ -615,13 +622,17 @@ class OrbSprites {
 
 /// Background recipes.
 class BackgroundTheme {
-  const BackgroundTheme(this.id, this.top, this.bottom, this.nebulaA, this.nebulaB, this.star);
+  const BackgroundTheme(this.id, this.top, this.bottom, this.nebulaA, this.nebulaB, this.star, [this.style = 0]);
   final String id;
   final int top;
   final int bottom;
   final int nebulaA;
   final int nebulaB;
   final int star;
+
+  /// 0 = plain. The campaign worlds each add their own feature: 1 dust lanes, 2 gas pillars,
+  /// 3 newborn stars, 4 a spiral arm, 5 an event horizon.
+  final int style;
 }
 
 const Map<String, BackgroundTheme> backgrounds = {
@@ -631,6 +642,11 @@ const Map<String, BackgroundTheme> backgrounds = {
   'bg_emerald': BackgroundTheme('bg_emerald', 0x04201F, 0x06342B, 0x2CFFB0, 0x1E9DFF, 0xDFFFF3),
   'bg_crimson': BackgroundTheme('bg_crimson', 0x1C0508, 0x3A0A16, 0xFF3A4E, 0xFF8A3A, 0xFFE2DC),
   'bg_singularity': BackgroundTheme('bg_singularity', 0x000000, 0x0C0616, 0x7A2BFF, 0xFFB04A, 0xE6DBFF),
+  'bg_origin': BackgroundTheme('bg_origin', 0x0B0A1E, 0x241208, 0xC8783C, 0x5A4CC8, 0xFFE8CC, 1),
+  'bg_cradle': BackgroundTheme('bg_cradle', 0x120A34, 0x2C0B40, 0xFF5FC0, 0x4FA8FF, 0xFFE3FA, 2),
+  'bg_forge': BackgroundTheme('bg_forge', 0x0A1030, 0x3A1A08, 0xFFB03A, 0xFF6A2B, 0xFFF4D6, 3),
+  'bg_spiral': BackgroundTheme('bg_spiral', 0x04101E, 0x0E0A30, 0x3CC8FF, 0x8C6BFF, 0xDFF6FF, 4),
+  'bg_horizon': BackgroundTheme('bg_horizon', 0x000000, 0x0A0414, 0x8A3CFF, 0xFF8A3A, 0xE6DBFF, 5),
 };
 
 BackgroundTheme backgroundTheme(String id) => backgrounds[id] ?? backgrounds['bg_deep']!;
@@ -650,6 +666,7 @@ void paintBackground(Canvas c, Size size, BackgroundTheme bg) {
   nebula(Offset(size.width * 0.15, size.height * 0.2), m * 0.75, bg.nebulaA, 0.30);
   nebula(Offset(size.width * 0.9, size.height * 0.78), m * 0.85, bg.nebulaB, 0.24);
   nebula(Offset(size.width * 0.55, size.height * 0.5), m * 0.5, bg.nebulaA, 0.10);
+  _backgroundFeature(c, size, bg);
   final rnd = math.Random(5);
   final p = Paint();
   for (var i = 0; i < 110; i++) {
@@ -659,5 +676,101 @@ void paintBackground(Canvas c, Size size, BackgroundTheme bg) {
       0.4 + rnd.nextDouble() * 1.1,
       p,
     );
+  }
+}
+
+/// The feature that makes a campaign world's sky its own. Plain shapes and gradients only -
+/// no blur filters, so the backdrop stays cheap wherever it is drawn.
+void _backgroundFeature(Canvas c, Size size, BackgroundTheme bg) {
+  final w = size.width;
+  final h = size.height;
+  final m = size.shortestSide;
+  final rnd = math.Random(40 + bg.style);
+  final p = Paint();
+  void soft(Offset at, double radius, int hex, double alpha) {
+    c.drawCircle(at, radius, Paint()..shader = ui.Gradient.radial(at, radius, [_c(hex, alpha), _c(hex, 0)]));
+  }
+
+  switch (bg.style) {
+    case 1:
+      // Dust lanes: specks gathered along a diagonal band.
+      for (var i = 0; i < 260; i++) {
+        final t = rnd.nextDouble();
+        final spread = (rnd.nextDouble() + rnd.nextDouble() - 1) * h * 0.16;
+        p.color = _c(i.isEven ? bg.nebulaA : bg.star, 0.10 + rnd.nextDouble() * 0.35);
+        c.drawCircle(Offset(t * w, h * 0.78 - t * h * 0.5 + spread), 0.5 + rnd.nextDouble() * 1.6, p);
+      }
+      for (var i = 0; i < 7; i++) {
+        final t = rnd.nextDouble();
+        soft(Offset(t * w, h * 0.78 - t * h * 0.5), m * (0.10 + rnd.nextDouble() * 0.12), bg.nebulaA, 0.10);
+      }
+    case 2:
+      // Gas pillars rising from below.
+      for (var i = 0; i < 4; i++) {
+        final x = w * (0.12 + i * 0.26 + (rnd.nextDouble() - 0.5) * 0.08);
+        final top = h * (0.38 + rnd.nextDouble() * 0.22);
+        for (var k = 0; k < 7; k++) {
+          final y = top + (h - top) * k / 6;
+          soft(
+            Offset(x + (rnd.nextDouble() - 0.5) * m * 0.08, y),
+            m * (0.12 + k * 0.022),
+            i.isEven ? bg.nebulaA : bg.nebulaB,
+            0.11,
+          );
+        }
+        soft(Offset(x, top), m * 0.05, 0xFFFFFF, 0.28);
+      }
+    case 3:
+      // Newborn stars with cross flares over a furnace glow.
+      c.drawRect(
+        Offset.zero & size,
+        Paint()
+          ..shader = ui.Gradient.linear(Offset(0, h * 0.55), Offset(0, h), [_c(bg.nebulaB, 0), _c(bg.nebulaB, 0.22)]),
+      );
+      for (var i = 0; i < 9; i++) {
+        final at = Offset(rnd.nextDouble() * w, rnd.nextDouble() * h * 0.8);
+        final r = m * (0.02 + rnd.nextDouble() * 0.035);
+        soft(at, r * 2.4, bg.nebulaA, 0.22);
+        _sparkle(c, at, r * 2.2, 0.85);
+      }
+    case 4:
+      // One arm of a spiral galaxy sweeping across the sky.
+      final centre = Offset(w * 0.82, h * 0.2);
+      soft(centre, m * 0.3, bg.nebulaA, 0.2);
+      for (var i = 0; i < 320; i++) {
+        final t = i / 320;
+        final ang = 2.2 + t * 4.6 + (rnd.nextDouble() - 0.5) * 0.35;
+        final rad = m * (0.06 + 1.25 * t) + (rnd.nextDouble() - 0.5) * m * 0.12;
+        p.color = Color.lerp(_c(bg.star), _c(bg.nebulaB), t)!.withValues(alpha: 0.12 + rnd.nextDouble() * 0.4);
+        c.drawCircle(centre + Offset(math.cos(ang) * rad, math.sin(ang) * rad * 0.8), 0.5 + rnd.nextDouble() * 1.5, p);
+      }
+    case 5:
+      // The event horizon: a black disc rimmed with light, rising behind the board.
+      final centre = Offset(w * 0.5, h * 0.2);
+      final r = m * 0.34;
+      soft(centre, r * 1.9, bg.nebulaA, 0.2);
+      for (var i = 0; i < 3; i++) {
+        c.drawOval(
+          Rect.fromCenter(center: centre, width: r * (3.0 - i * 0.28), height: r * (0.62 - i * 0.1)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = m * 0.012
+            ..color = _c(i == 1 ? 0xFFE9B8 : bg.nebulaB, 0.34 - i * 0.07),
+        );
+      }
+      c.drawCircle(centre, r, Paint()..color = _c(0x000000));
+      c.drawCircle(
+        centre,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = m * 0.008
+          ..shader = ui.Gradient.sweep(centre, [
+            _c(bg.nebulaB, 0.9),
+            _c(bg.nebulaA, 0.5),
+            _c(0xFFF4CC, 0.95),
+            _c(bg.nebulaB, 0.9),
+          ]),
+      );
   }
 }

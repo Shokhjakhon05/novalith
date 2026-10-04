@@ -9,11 +9,13 @@ import 'package:flutter/material.dart';
 
 import '../app/app_model.dart';
 import '../core/ad_policy.dart';
+import '../core/campaign.dart';
 import '../core/daily.dart';
 import '../core/game_core.dart';
 import '../core/progression.dart';
 import '../game/board_game.dart';
 import '../services/feedback.dart';
+import 'campaign_widgets.dart';
 import 'widgets.dart';
 
 enum _Phase { playing, paused, continuePrompt, results }
@@ -27,6 +29,11 @@ String achievementText(AppModel m, Achievement a) => switch (a.stat) {
   Stat.dailyCompleted => m.t('ach_daily', {'n': a.target}),
   Stat.bigBangs => m.t('ach_bigbang'),
   Stat.perfects => m.t('ach_perfect', {'n': a.target}),
+  Stat.campaignLevels => m.t('wg_levels', {'n': a.target}),
+  Stat.stars => m.t('earn_stars', {'n': a.target}),
+  Stat.masters => m.t('wg_masters', {'n': a.target}),
+  Stat.worlds => m.t('ach_worlds', {'n': a.target}),
+  Stat.weeklies => m.t('ach_weekly', {'n': a.target}),
 };
 
 String dailyGoalText(AppModel m, DailyChallenge d) => switch (d.type) {
@@ -36,10 +43,19 @@ String dailyGoalText(AppModel m, DailyChallenge d) => switch (d.type) {
 };
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.daily});
+  const GameScreen({super.key, this.daily, this.level, this.master = false, this.exitLabel = 'home'});
 
-  /// Null = classic endless mode.
+  /// Null (and no [level]) = classic endless mode.
   final DailyChallenge? daily;
+
+  /// A campaign level to play; "next level" moves on from it without leaving the screen.
+  final LevelDef? level;
+
+  /// Play the level's master challenge.
+  final bool master;
+
+  /// Localisation key of the button that leaves the screen.
+  final String exitLabel;
 
   /// The debug button is shown only in debug builds; tests that render store screenshots
   /// switch it off as well.
@@ -67,6 +83,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   Timer? _continueTimer;
   int _continueLeft = 0;
   final RewardGate _gate = RewardGate();
+  LevelDef? _level;
+  bool _master = false;
+
+  bool get _classic => widget.daily == null && _level == null;
 
   BoardGame get game => _game!;
 
@@ -81,15 +101,33 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     super.didChangeDependencies();
     _model = AppScope.of(context);
     if (_game == null) {
+      _level = widget.level;
+      _master = widget.master;
       _game = BoardGame(core: _newCore(resume: true), model: _model)
         ..onEvent = _onEvent
         ..onRunEnded = _onRunEnded;
       game.startRun(game.core);
       _tutorial = _model.profile.tutorialDone ? 3 : 0;
+      _announceLevel();
     }
   }
 
+  /// Says what the level asks for as it starts (the goal also stays in the HUD).
+  void _announceLevel() {
+    final level = _level;
+    game.backgroundOverride = level == null ? null : worldDef(level.world).background;
+    if (level == null || _tutorial < 3) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showBanner(goalLines(_model, level, master: _master).join(' · '));
+    });
+  }
+
   GameCore _newCore({bool resume = false}) {
+    final level = _level;
+    if (level != null) {
+      _runId = 'l-${level.id}-${_master ? 'm' : 'n'}-${_model.now.microsecondsSinceEpoch}-${_runCounter++}';
+      return _model.startLevel(level, master: _master);
+    }
     final daily = widget.daily;
     if (daily != null) {
       _runId = 'd-${daily.dateKey}-${_model.now.microsecondsSinceEpoch}-${_runCounter++}';
@@ -121,7 +159,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _stashRun() {
-    if (widget.daily == null && _phase != _Phase.results && !game.core.over) {
+    if (_classic && _phase != _Phase.results && !game.core.over) {
       _model.storeActiveRun(game.core);
     }
   }
@@ -141,6 +179,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     // Autosave every few drops, so even a killed process loses at most a moment of play.
     if (e.type == EventType.drop && game.core.drops % 5 == 0) _stashRun();
     if (e.type == EventType.merge) {
+      // A level that is judged by drops is over the moment its goal is reached.
+      final level = _level;
+      if (level != null && !level.byScore && !game.core.over && level.passed(game.core, master: _master)) {
+        game.core.complete();
+      }
       if (_tutorial < 3) {
         setState(() => _tutorial = 3);
         _model.completeTutorial();
@@ -162,7 +205,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _onRunEnded() {
     final core = game.core;
-    if (widget.daily == null && core.canContinue && _model.ads.rewardedReady) {
+    if (_classic && core.canContinue && _model.ads.rewardedReady) {
       _continueLeft = 6;
       _setPhase(_Phase.continuePrompt);
       _continueTimer?.cancel();
@@ -185,15 +228,18 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _finalize() {
     _continueTimer?.cancel();
-    final outcome = _model.finishRun(game.core, _runId, daily: widget.daily);
+    final outcome = _bank();
     _model.completeTutorial();
     if (outcome != null) {
       _outcome = outcome;
       _doubled = 0;
       if (outcome.record && outcome.previousBest > 0) _model.audio.play(Sfx.record);
+      if (outcome.worldDone > 0 || outcome.masterNow) _model.audio.play(Sfx.unlock);
     }
     _setPhase(_Phase.results);
   }
+
+  RunOutcome? _bank() => _model.finishRun(game.core, _runId, daily: widget.daily, level: _level, master: _master);
 
   // --- Ads (always optional: a failure simply means "no bonus") ---
 
@@ -255,13 +301,23 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   Future<void> _playAgain() async {
     if (_busy) return;
     _busy = true;
-    if (_phase != _Phase.results) _model.finishRun(game.core, _runId, daily: widget.daily);
+    if (_phase != _Phase.results) _bank();
     await _interstitialIfDue();
     _busy = false;
     if (!mounted) return;
     _outcome = null;
     game.startRun(_newCore());
+    _announceLevel();
     _setPhase(_Phase.playing);
+  }
+
+  /// Result screen -> the following campaign level, without going back to the map.
+  Future<void> _nextLevel() async {
+    final next = _level == null ? null : nextLevel(_level!.id);
+    if (next == null || !_model.unlocked(next)) return;
+    _level = next;
+    _master = false;
+    await _playAgain();
   }
 
   Future<void> _goHome() async {
@@ -270,9 +326,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _busy = true;
       await _interstitialIfDue();
       _busy = false;
-    } else if (widget.daily != null) {
-      // A daily attempt cannot be resumed later: bank what was achieved.
-      _model.finishRun(game.core, _runId, daily: widget.daily);
+    } else if (!_classic) {
+      // A daily or campaign attempt cannot be resumed later: bank what was achieved.
+      _bank();
     } else {
       _stashRun();
     }
@@ -338,7 +394,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             if (_phase == _Phase.playing && _tutorial < 3) _tutorialHint(media),
             if (_phase == _Phase.paused) _overlay(_pausePanel()),
             if (_phase == _Phase.continuePrompt) _overlay(_continuePanel()),
-            if (_phase == _Phase.results) _overlay(_resultsPanel()),
+            if (_phase == _Phase.results) _overlay(_level != null ? _levelResults() : _resultsPanel()),
           ],
         ),
       ),
@@ -347,7 +403,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   Widget _hud() {
     final daily = widget.daily;
-    final best = daily == null ? _model.profile.bestScore : _model.dailyBestToday;
+    final level = _level;
+    final best = level != null
+        ? (_model.profile.levels[level.id]?.best ?? 0)
+        : daily == null
+        ? _model.profile.bestScore
+        : _model.dailyBestToday;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
       child: Column(
@@ -441,7 +502,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             ],
           ),
           const SizedBox(height: 6),
-          if (daily != null)
+          if (level != null)
+            _levelGoalPanel(level)
+          else if (daily != null)
             GlassPanel(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               radius: 14,
@@ -471,6 +534,49 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               child: CoinBadge(amount: _model.profile.coins, size: 14),
             ),
         ],
+      ),
+    );
+  }
+
+  /// The level's goal, how many stars are still in reach, and the drops that remain.
+  Widget _levelGoalPanel(LevelDef level) {
+    final accent = worldColor(level.world);
+    return GlassPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      radius: 14,
+      border: accent.withValues(alpha: 0.6),
+      child: AnimatedBuilder(
+        animation: Listenable.merge([game.score, game.dropsLeft]),
+        builder: (context, _) {
+          final core = game.core;
+          final ready = level.goals.every((g) => g.type == GoalType.survive || level.goalMet(core, g, master: _master));
+          final int stars;
+          if (level.byScore) {
+            stars = ready ? 1 + (core.score >= level.star2 ? 1 : 0) + (core.score >= level.star3 ? 1 : 0) : 0;
+          } else {
+            stars = core.drops <= level.star3 ? 3 : (core.drops <= level.star2 ? 2 : 1);
+          }
+          return Row(
+            children: [
+              Text(levelTag(level), style: ts(15, weight: 800, color: accent)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  goalLines(_model, level, master: _master).join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: ts(12.5, weight: 600, color: ready ? Palette.green : Palette.dim),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _master
+                  ? Icon(Icons.diamond_rounded, size: 18, color: ready ? Palette.cyan : Palette.faint)
+                  : StarRow(stars: stars, size: 15),
+              const SizedBox(width: 8),
+              Text('${game.dropsLeft.value}', style: ts(18, weight: 800, color: Palette.cyan)),
+            ],
+          );
+        },
       ),
     );
   }
@@ -586,7 +692,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             const SizedBox(height: 12),
             GameButton(label: _model.t('restart'), icon: Icons.refresh_rounded, onTap: _playAgain),
             const SizedBox(height: 12),
-            GameButton(label: _model.t('home'), icon: Icons.home_rounded, onTap: _goHome),
+            GameButton(
+              label: _model.t(widget.exitLabel),
+              icon: widget.exitLabel == 'map' ? Icons.map_rounded : Icons.home_rounded,
+              onTap: _goHome,
+            ),
             const SizedBox(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -708,83 +818,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               style: ts(15, color: Palette.dim),
               textAlign: TextAlign.center,
             ),
-          if (o != null)
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 14),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('+', style: ts(22, weight: 800, color: Palette.gold)),
-                        CoinBadge(amount: o.totalCoins + _doubled, size: 22),
-                        if (_doubled > 0) ...[
-                          const SizedBox(width: 8),
-                          Text('×2', style: ts(18, weight: 800, color: Palette.green)),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _XpBar(model: _model, gained: o.levelsGained),
-                    if (o.discoveries.any((lv) => lv > _model.balance.spawnWeights.length)) ...[
-                      const SizedBox(height: 14),
-                      Text(
-                        _model.t('new_discovery'),
-                        style: ts(13, weight: 700, color: Palette.gold, spacing: 0.6),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 10,
-                        runSpacing: 6,
-                        children: [
-                          for (final lv in o.discoveries.where((lv) => lv > _model.balance.spawnWeights.length))
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                OrbView(level: lv, size: 46),
-                                Text(_model.evoName(lv), style: ts(11, color: Palette.dim)),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ],
-                    for (final a in o.newAchievements)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.military_tech_rounded, color: Palette.gold, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(achievementText(_model, a), style: ts(13.5, weight: 600))),
-                            CoinBadge(amount: a.coins, size: 13),
-                          ],
-                        ),
-                      ),
-                    for (final item in o.unlockedItems)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.lock_open_rounded, color: Palette.green, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '${_model.t('unlocked')}: ${_model.t(item.id)}',
-                                style: ts(13.5, weight: 600),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+          if (o != null) Flexible(child: SingleChildScrollView(child: _rewards(o))),
           const SizedBox(height: 16),
           GameButton(
             label: _model.t('play_again'),
@@ -805,6 +839,252 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           ],
           const SizedBox(height: 10),
           GameButton(label: _model.t('home'), icon: Icons.home_rounded, enabled: !_busy, compact: true, onTap: _goHome),
+        ],
+      ),
+    );
+  }
+
+  /// Everything a run paid out, spelled out: coins, XP, discoveries, achievements, unlocks.
+  Widget _rewards(RunOutcome o, {List<Widget> extra = const []}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('+', style: ts(22, weight: 800, color: Palette.gold)),
+            CoinBadge(amount: o.totalCoins + _doubled, size: 22),
+            if (_doubled > 0) ...[
+              const SizedBox(width: 8),
+              Text('×2', style: ts(18, weight: 800, color: Palette.green)),
+            ],
+          ],
+        ),
+        const SizedBox(height: 12),
+        _XpBar(model: _model, gained: o.levelsGained),
+        if (o.discoveries.any((lv) => lv > _model.balance.spawnWeights.length)) ...[
+          const SizedBox(height: 14),
+          Text(
+            _model.t('new_discovery'),
+            style: ts(13, weight: 700, color: Palette.gold, spacing: 0.6),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 6,
+            children: [
+              for (final lv in o.discoveries.where((lv) => lv > _model.balance.spawnWeights.length))
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OrbView(level: lv, size: 46),
+                    Text(_model.evoName(lv), style: ts(11, color: Palette.dim)),
+                  ],
+                ),
+            ],
+          ),
+        ],
+        for (final a in o.newAchievements)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.military_tech_rounded, color: Palette.gold, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text(achievementText(_model, a), style: ts(13.5, weight: 600))),
+                CoinBadge(amount: a.coins, size: 13),
+              ],
+            ),
+          ),
+        for (final item in o.unlockedItems)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_open_rounded, color: Palette.green, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('${_model.t('unlocked')}: ${_model.itemName(item)}', style: ts(13.5, weight: 600)),
+                ),
+              ],
+            ),
+          ),
+        ...extra,
+      ],
+    );
+  }
+
+  Widget _levelResults() {
+    final o = _outcome;
+    final level = _level!;
+    final core = game.core;
+    final p = _model.profile;
+    final rec = p.levels[level.id];
+    final passed = o?.passed ?? level.passed(core, master: _master);
+    final accent = !passed ? Palette.violet : (_master ? Palette.cyan : Palette.gold);
+    final String title;
+    if (!passed) {
+      title = _model.t('challenge_failed');
+    } else if (_master) {
+      title = _model.t('completed');
+    } else {
+      title = _model.t(o != null && o.worldDone > 0 ? 'world_complete' : 'level_complete');
+    }
+    final next = nextLevel(level.id);
+    final canNext = passed && !_master && next != null && _model.unlocked(next);
+    final canDouble = o != null && o.coins > 0 && _doubled == 0 && _model.ads.rewardedReady;
+    final done = worldLevels(level.world).where((l) => p.starsOf(l.id) > 0).length;
+    final total = worldLevels(level.world).length;
+    final assist = passed || _master ? 0 : level.assistDrops(p.fails[level.id] ?? 0);
+
+    final String record;
+    if (_master) {
+      record = _model.t('master');
+    } else if (!level.byScore && (rec?.fewest ?? 0) > 0) {
+      record = _model.t('fewest_drops', {'n': rec!.fewest});
+    } else if (o != null && o.record && o.previousBest > 0) {
+      record = _model.t('new_record');
+    } else if ((rec?.best ?? 0) > core.score) {
+      record = _model.t('to_record', {'n': formatNumber(rec!.best - core.score)});
+    } else {
+      record = '${_model.t('best')} ${formatNumber(rec?.best ?? core.score)}';
+    }
+
+    return GlassPanel(
+      solid: true,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      border: accent,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${_model.worldName(level.world)} · ${levelTag(level)}',
+            style: ts(13, weight: 700, color: worldColor(level.world), spacing: 0.6),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(title, style: ts(28, weight: 800, color: accent)),
+          ),
+          const SizedBox(height: 8),
+          if (_master)
+            Icon(Icons.diamond_rounded, size: 54, color: passed ? Palette.cyan : Palette.faint)
+          else
+            _BigStars(stars: passed ? level.stars(core) : 0),
+          const SizedBox(height: 4),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: core.score.toDouble()),
+            duration: const Duration(milliseconds: 650),
+            curve: Curves.easeOutCubic,
+            builder: (context, v, _) => FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(formatNumber(v.round()), style: ts(44, weight: 800, height: 1.1)),
+            ),
+          ),
+          Text(
+            record,
+            style: ts(14, color: Palette.dim),
+            textAlign: TextAlign.center,
+          ),
+          if (!passed)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                goalLines(_model, level, master: _master).join(' · '),
+                style: ts(13, color: Palette.dim),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          if (o != null)
+            Flexible(
+              child: SingleChildScrollView(
+                child: _rewards(
+                  o,
+                  extra: [
+                    if (o.worldDone > 0) _unlockLine(Icons.public_rounded, Palette.gold, _model.t('world_complete')),
+                    if (o.firstClear && !level.trial)
+                      _unlockLine(Icons.diamond_rounded, Palette.cyan, _model.t('master')),
+                    if (o.masterNow) _unlockLine(Icons.diamond_rounded, Palette.cyan, _model.t('completed')),
+                    if (assist > 0)
+                      _unlockLine(Icons.volunteer_activism_rounded, Palette.green, _model.t('assist', {'n': assist})),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text('${_model.worldName(level.world)} $done / $total', style: ts(12.5, weight: 700, color: Palette.dim)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ProgressBar(value: done / total, color: worldColor(level.world), height: 6),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          GameButton(
+            label: _model.t(canNext ? 'next_level' : 'play_again'),
+            icon: canNext ? Icons.arrow_forward_rounded : Icons.refresh_rounded,
+            primary: true,
+            enabled: !_busy,
+            onTap: canNext ? _nextLevel : _playAgain,
+          ),
+          if (canDouble) ...[
+            const SizedBox(height: 10),
+            GameButton(
+              label: _model.t('double_coins'),
+              icon: Icons.play_circle_fill_rounded,
+              color: Palette.gold,
+              enabled: !_busy,
+              compact: true,
+              onTap: _doubleWithAd,
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (canNext) ...[
+                Expanded(
+                  child: GameButton(
+                    label: _model.t('play_again'),
+                    icon: Icons.refresh_rounded,
+                    enabled: !_busy,
+                    compact: true,
+                    onTap: _playAgain,
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: GameButton(
+                  label: _model.t(widget.exitLabel),
+                  icon: widget.exitLabel == 'map' ? Icons.map_rounded : Icons.home_rounded,
+                  enabled: !_busy,
+                  compact: true,
+                  onTap: _goHome,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _unlockLine(IconData icon, Color color, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: ts(13.5, weight: 600))),
         ],
       ),
     );
@@ -868,6 +1148,38 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 }
 
+/// The three stars of a result, popping in one after another.
+class _BigStars extends StatelessWidget {
+  const _BigStars({required this.stars});
+  final int stars;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 1; i <= 3; i++)
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: Duration(milliseconds: 260 + i * 180),
+            curve: Interval(1 - 260 / (260 + i * 180), 1, curve: Curves.easeOutBack),
+            builder: (context, v, _) => Transform.scale(
+              scale: i <= stars ? 0.4 + 0.6 * v : 1,
+              child: Padding(
+                padding: EdgeInsets.only(left: 3, right: 3, top: i == 2 ? 0 : 10),
+                child: Icon(
+                  i <= stars ? Icons.star_rounded : Icons.star_border_rounded,
+                  size: i == 2 ? 62 : 50,
+                  color: i <= stars ? Palette.gold : Palette.faint,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _Toggle extends StatelessWidget {
   const _Toggle({required this.icon, required this.label, required this.on, required this.onChanged});
   final IconData icon;
@@ -917,10 +1229,8 @@ class _XpBar extends StatelessWidget {
     final need = model.balance.xpForLevel(p.level);
     return Row(
       children: [
-        Text(
-          model.t('level_n', {'n': p.level}),
-          style: ts(13, weight: 700, color: gained > 0 ? Palette.green : Palette.dim),
-        ),
+        Icon(Icons.bolt_rounded, size: 18, color: gained > 0 ? Palette.green : Palette.violet),
+        Text('${p.level}', style: ts(14, weight: 800, color: gained > 0 ? Palette.green : Palette.violet)),
         const SizedBox(width: 10),
         Expanded(
           child: ClipRRect(

@@ -10,8 +10,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novalith/app/app_model.dart';
 import 'package:novalith/core/bots.dart';
+import 'package:novalith/core/campaign.dart';
+import 'package:novalith/core/campaign_data.dart';
 import 'package:novalith/core/daily.dart';
+import 'package:novalith/core/game_core.dart';
 import 'package:novalith/core/profile.dart';
+import 'package:novalith/core/progression.dart';
 import 'package:novalith/core/rng.dart';
 import 'package:novalith/game/board_game.dart';
 import 'package:novalith/l10n/l10n.dart';
@@ -23,6 +27,8 @@ import 'package:novalith/services/purchases.dart';
 import 'package:novalith/services/save_store.dart';
 import 'package:novalith/ui/collection_screen.dart';
 import 'package:novalith/ui/game_screen.dart';
+import 'package:novalith/ui/goals_screen.dart';
+import 'package:novalith/ui/map_screen.dart';
 import 'package:novalith/ui/settings_screen.dart';
 import 'package:novalith/ui/shop_screen.dart';
 import 'package:novalith/ui/widgets.dart';
@@ -127,7 +133,7 @@ void main() {
     expect(rig.model.loadStatus, LoadStatus.fresh);
     await shot(tester, 'menu');
 
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     expect(find.byType(GameScreen), findsOneWidget);
     expect(find.text('Slide to aim'), findsOneWidget, reason: 'contextual onboarding, no manual');
 
@@ -173,10 +179,162 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('campaign: a new player goes from the menu through level 1 to level 2', (tester) async {
+    final rig = Rig();
+    await launch(tester, rig);
+    expect(find.text('Level 1 of 20'), findsOneWidget, reason: 'the menu says where the player is');
+    expect(find.text('WORLD 1 · ORIGIN'), findsOneWidget);
+
+    await tapText(tester, 'PLAY');
+    expect(find.byType(GameScreen), findsOneWidget);
+    expect(find.text('Slide to aim'), findsOneWidget, reason: 'the first level is also the tutorial');
+    expect(find.text('Make 3 merges'), findsOneWidget, reason: 'the goal is on screen from the start');
+    final game = board(tester);
+    expect(game.core.dropLimit, campaignLevels.first.drops);
+
+    // Play it for real: drop into one column until the goal is reached.
+    for (var i = 0; i < campaignLevels.first.drops && !game.core.over; i++) {
+      await dropAt(tester, 100 + (i % 3) * 30);
+    }
+    await seconds(tester, 2.5);
+    expect(game.core.merges, greaterThanOrEqualTo(3));
+    expect(game.core.endReason, EndReason.completed, reason: 'the level ends the moment the goal is met');
+    expect(find.text('Level complete!'), findsOneWidget);
+    expect(rig.model.profile.starsOf(101), greaterThan(0));
+    expect(rig.model.profile.bestScore, 0, reason: 'the classic record belongs to the endless mode');
+    expect(rig.analytics.events, containsAll(['campaign_level_started', 'campaign_level_completed', 'star_earned']));
+    await shot(tester, 'level_result');
+
+    await tapText(tester, 'Next level');
+    final next = board(tester);
+    expect(next.core.drops, 0);
+    expect(next.core.dropLimit, campaignLevels[1].drops);
+    expect(find.text('Create: Asteroid'), findsWidgets);
+
+    // Leaving mid-level banks the attempt as a miss and goes back to the menu.
+    await tester.binding.handlePopRoute();
+    await frames(tester, 20);
+    await tapText(tester, 'Home');
+    await frames(tester, 20);
+    expect(find.text('Level 2 of 20'), findsOneWidget);
+    expect(find.text('RESUME'), findsOneWidget);
+    expect(rig.model.profile.fails[102], 1);
+    expect(Profile.decode(rig.store.text).profile.starsOf(101), greaterThan(0), reason: 'progress is on disk');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('map: current level in view, locked levels refuse, master opens after completion', (tester) async {
+    final rig = Rig();
+    final p = Profile()
+      ..runs = 3
+      ..rewardLastDate = 20261004
+      ..rewardLastUtcMs = DateTime(2026, 10, 4, 12).toUtc().millisecondsSinceEpoch;
+    for (final l in campaignLevels.take(23)) {
+      p.levels[l.id] = LevelRecord(stars: 2, best: 500);
+    }
+    rig.store.text = p.encode();
+    await launch(tester, rig);
+    expect(find.text('WORLD 2 · NEBULA'), findsOneWidget);
+    expect(find.text('Level 4 of 20'), findsOneWidget);
+
+    await tester.tap(find.text('Level 4 of 20'));
+    await frames(tester, 30);
+    expect(find.byType(MapScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('level-204')), findsOneWidget, reason: 'opens on the current level');
+    await shot(tester, 'map');
+
+    // Level 2-6 is two steps ahead: locked.
+    await tester.tap(find.byKey(const ValueKey('level-206')));
+    await frames(tester, 20);
+    expect(find.text('Complete the previous level first'), findsOneWidget);
+    expect(find.byType(GameScreen), findsNothing);
+
+    // A completed level shows its record and offers the master challenge.
+    await tester.tap(find.byKey(const ValueKey('level-203')));
+    await frames(tester, 30);
+    expect(find.text('Master challenge'), findsOneWidget);
+    await shot(tester, 'level_sheet');
+    await tapText(tester, 'Master challenge');
+    expect(find.byType(GameScreen), findsOneWidget);
+    final game = board(tester);
+    expect(game.core.dropLimit, levelDef(203)!.master.drops);
+    game.core.merges = 15;
+    game.core.complete();
+    await seconds(tester, 1.2);
+    expect(rig.model.profile.levels[203]!.master, isTrue);
+    expect(rig.analytics.events, containsAll(['master_started', 'master_completed']));
+    await tapText(tester, 'Map');
+    await frames(tester, 20);
+    expect(find.byType(MapScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('update from the pre-campaign version: progress kept, a thank-you gift, once', (tester) async {
+    final rig = Rig();
+    // A save exactly as version 1 wrote it.
+    rig.store.text =
+        '{"v":1,"coins":730,"xp":12,"level":4,"bestScore":8200,"owned":["theme_cosmos","bg_deep","theme_neon"],'
+        '"theme":"theme_neon","background":"bg_deep","achievements":["merges_10","merges_100","evo_6"],'
+        '"discovered":[2,3,4,5,6,7],"stats":{"runs":14,"totalMerges":420,"totalScore":50000,"maxChain":4,'
+        '"maxLevel":7,"bigBangs":0,"perfects":30,"dailyCompleted":2},"daily":{"date":0,"best":0,"done":false},'
+        '"reward":{"day":2,"streak":2,"lastDate":20261004,"lastUtcMs":${DateTime(2026, 10, 4, 12).toUtc().millisecondsSinceEpoch}},'
+        '"settings":{"music":false,"sfx":true,"haptics":true,"showNumbers":false,"language":"en"},'
+        '"tutorialDone":true,"removeAds":false,"lastRewardedRun":"x","lastDoubledRun":"","lastRunCoins":5,'
+        '"runsSinceInterstitial":1,"activeRun":null}';
+    await launch(tester, rig);
+    final p = rig.model.profile;
+    expect(rig.model.loadStatus, LoadStatus.ok);
+    expect(p.bestScore, 8200);
+    expect(p.theme, 'theme_neon');
+    expect(p.achievements, containsAll(['merges_10', 'merges_100', 'evo_6']));
+    expect(p.discovered, {2, 3, 4, 5, 6, 7});
+    expect(p.music, isFalse);
+    expect(find.text('Welcome back!'), findsOneWidget);
+    final gift = p.gift;
+    expect(gift, 50 + 30 + 8200 ~/ 400);
+    await tapText(tester, 'Claim');
+    expect(p.coins, 730 + gift);
+    expect(p.gift, 0);
+    expect(find.text('Welcome back!'), findsNothing);
+
+    // After a restart the gift does not come back.
+    await launch(tester, rig);
+    expect(find.text('Welcome back!'), findsNothing);
+    expect(rig.model.profile.coins, 730 + gift);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('weekly goals and the archive: shown on the menu, paid once', (tester) async {
+    final rig = Rig();
+    final p = Profile()
+      ..runs = 5
+      ..rewardLastDate = 20261004
+      ..rewardLastUtcMs = DateTime(2026, 10, 4, 12).toUtc().millisecondsSinceEpoch;
+    syncCalendar(p, DateTime(2026, 10, 4, 12));
+    final goal = weeklyGoals(p).first;
+    p.weekProgress[goal.id] = goal.target;
+    p.monthPoints = monthlyTarget;
+    rig.store.text = p.encode();
+    await launch(tester, rig);
+    expect(rig.model.goalsClaimable, isTrue);
+    await tapText(tester, 'Weekly goals');
+    expect(find.byType(GoalsScreen), findsOneWidget);
+    await shot(tester, 'goals');
+    await tapText(tester, 'Claim');
+    expect(rig.model.profile.coins, goal.coins);
+    await tapText(tester, 'Claim');
+    expect(rig.model.profile.coins, goal.coins + monthlyCoins);
+    expect(rig.model.profile.owned, contains(monthlyTheme));
+    expect(find.text('Claim'), findsNothing);
+    expect(rig.model.claimWeeklyGoal(goal.id), 0);
+    expect(rig.model.claimMonthlyReward(), 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('rewarded continue: once per run; reward and 2x coins are idempotent', (tester) async {
     final rig = Rig(rewarded: true);
     await launch(tester, rig);
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     final game = board(tester);
     for (var i = 0; i < 8; i++) {
       await dropAt(tester, 60.0 + i * 30);
@@ -213,7 +371,7 @@ void main() {
   testWidgets('failed or abandoned rewarded ad: no reward, no freeze, game goes on', (tester) async {
     final rig = Rig(rewarded: true, grant: false);
     await launch(tester, rig);
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     final game = board(tester);
     await dropAt(tester, 100);
     game.core.forceGameOver();
@@ -231,7 +389,7 @@ void main() {
   testWidgets('continue prompt times out on its own', (tester) async {
     final rig = Rig(rewarded: true);
     await launch(tester, rig);
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     board(tester).core.forceGameOver();
     await seconds(tester, 1.2);
     expect(find.text('Continue'), findsOneWidget);
@@ -253,7 +411,7 @@ void main() {
               ..rewardLastUtcMs = DateTime(2026, 10, 4, 12).toUtc().millisecondsSinceEpoch)
             .encode();
     await launch(tester, rig);
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     for (var run = 1; run <= 3; run++) {
       board(tester).core.forceGameOver();
       await seconds(tester, 1.2);
@@ -281,7 +439,7 @@ void main() {
   testWidgets('pause, back button, and background keep the run; relaunch resumes it', (tester) async {
     final rig = Rig();
     await launch(tester, rig);
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     final game = board(tester);
     for (var i = 0; i < 5; i++) {
       await dropAt(tester, 50.0 + i * 60);
@@ -318,8 +476,8 @@ void main() {
     // The process is killed: a new app instance over the same save file.
     final again = Rig(store: rig.store);
     await launch(tester, again);
-    expect(find.text('RESUME'), findsOneWidget);
-    await tapText(tester, 'RESUME');
+    expect(find.text('Endless'), findsOneWidget);
+    await tapText(tester, 'Endless');
     final restored = board(tester);
     expect(restored.core.drops, drops);
     expect(restored.core.score, score);
@@ -333,7 +491,7 @@ void main() {
   testWidgets('spam tapping and multi-touch cannot break the cooldown or the state', (tester) async {
     final rig = Rig();
     await launch(tester, rig);
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     final game = board(tester);
     for (var i = 0; i < 60; i++) {
       final a = await tester.startGesture(Offset(30.0 + (i * 37) % 300, 400));
@@ -353,7 +511,7 @@ void main() {
   testWidgets('daily challenge: same pieces for the day, result banked, classic record untouched', (tester) async {
     final rig = Rig();
     await launch(tester, rig);
-    await tapText(tester, 'Daily challenge');
+    await tapText(tester, 'Daily');
     final d = rig.model.todayChallenge;
     expect(find.text(dailyGoalText(rig.model, d)), findsOneWidget);
     await shot(tester, 'daily');
@@ -492,7 +650,7 @@ void main() {
       expect(find.text(l.t('play').toUpperCase()), findsOneWidget);
       if (lang.code == 'ru' || lang.code == 'ar' || lang.code == 'zh') await shot(tester, 'menu_${lang.code}');
 
-      await tapText(tester, l.t('play').toUpperCase());
+      await tapText(tester, l.t('endless'));
       expect(find.text(l.t('tut_aim')), findsOneWidget);
       final game = board(tester);
       await dropAt(tester, 100);
@@ -517,14 +675,36 @@ void main() {
       await tapText(tester, l.t('home'));
 
       final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
-      for (final screen in const <Widget>[ShopScreen(), CollectionScreen(), AchievementsScreen(), SettingsScreen()]) {
+      for (final screen in const <Widget>[
+        ShopScreen(),
+        CollectionScreen(),
+        AchievementsScreen(),
+        SettingsScreen(),
+        MapScreen(),
+        GoalsScreen(),
+      ]) {
         nav.push(MaterialPageRoute<void>(builder: (_) => screen));
         await frames(tester, 20);
         nav.pop();
         await frames(tester, 30);
       }
-      await tapText(tester, l.t('daily_title'));
+      await tapText(tester, l.t('daily'));
       expect(find.text(dailyGoalText(rig.model, rig.model.todayChallenge)), findsOneWidget);
+      await tester.tapAt(const Offset(10, 40));
+      await frames(tester, 30);
+
+      // A campaign level and its result, in this language, on the same small phone.
+      nav.push(MaterialPageRoute<void>(builder: (_) => GameScreen(level: campaignLevels.first)));
+      await frames(tester, 30);
+      final level = board(tester);
+      level.core
+        ..merges = 3
+        ..score = 40;
+      level.core.complete();
+      await seconds(tester, 1.2);
+      expect(find.text(l.t('level_complete')), findsOneWidget);
+      expect(find.text(l.t('next_level')), findsOneWidget);
+      if (lang.code == 'ru' || lang.code == 'ar') await shot(tester, 'level_result_${lang.code}');
       expect(tester.takeException(), isNull, reason: 'layout overflow or error in ${lang.code}');
     });
   }
@@ -539,7 +719,7 @@ void main() {
               ..rewardLastUtcMs = DateTime(2026, 10, 4, 12).toUtc().millisecondsSinceEpoch)
             .encode();
     await launch(tester, rig);
-    await tapText(tester, 'PLAY');
+    await tapText(tester, 'Endless');
     final game = board(tester);
     final rng = SeededRng(7);
     var shotMerge = false;
@@ -620,7 +800,7 @@ void main() {
       await frames(tester, 10);
       await shot(tester, 'store_${code}_3_menu');
 
-      await tapText(tester, l.t('play').toUpperCase());
+      await tapText(tester, l.t('endless'));
       final game = board(tester);
       final rng = SeededRng(11);
       var combo = false;
@@ -663,7 +843,7 @@ void main() {
       await shot(tester, 'store_${code}_6_shop');
       nav.pop();
       await frames(tester, 40);
-      await tapText(tester, l.t('daily_title'));
+      await tapText(tester, l.t('daily'));
       await frames(tester, 30);
       await shot(tester, 'store_${code}_7_daily');
       expect(tester.takeException(), isNull);
@@ -680,7 +860,7 @@ void main() {
     final again = Rig(store: rig.store);
     await launch(tester, again);
     expect(again.model.profile.coins, 50, reason: 'valid fields are preserved');
-    await tapText(tester, 'RESUME');
+    await tapText(tester, 'Endless');
     expect(board(tester).core.drops, 0, reason: 'a broken run snapshot becomes a fresh run');
     await dropAt(tester, 150);
     expect(tester.takeException(), isNull);

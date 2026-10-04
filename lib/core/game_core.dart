@@ -9,7 +9,7 @@ import 'rng.dart';
 
 enum EventType { drop, impact, merge, bigBang, dangerEnter, dangerExit, gameOver, continued }
 
-enum EndReason { none, overflow, dropsExhausted }
+enum EndReason { none, overflow, dropsExhausted, completed }
 
 class GameEvent {
   const GameEvent(
@@ -495,6 +495,22 @@ class GameCore {
     over = true;
     endReason = reason;
     events.add(const GameEvent(EventType.gameOver));
+  }
+
+  /// Ends the run as a success: a campaign level whose goal has just been reached.
+  void complete() => _end(EndReason.completed);
+
+  /// Puts the starting bodies of a campaign level on the board. Each entry is `[level, x]`; a
+  /// body rests on the floor or on whatever was placed before it.
+  void seedBoard(List<List<int>> pieces) {
+    for (final p in pieces) {
+      final level = p[0];
+      if (level < 1 || level > balance.maxLevel) continue;
+      final r = balance.radius(level);
+      final x = p[1] < r ? r : (p[1] > balance.worldW - r ? balance.worldW - r : p[1].toDouble());
+      bodies.add(Body(_nextId++, level, x, landingY(x, r), r, r));
+    }
+    grace = 1.0;
   }
 
   /// Debug / test helper: ends the run as an overflow.
