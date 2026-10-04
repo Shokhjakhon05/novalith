@@ -1,0 +1,55 @@
+name: Smoke - launch the release APK on an emulator
+
+# Started by hand. Takes the APK built by a CI run, installs it on an Android emulator and
+# checks that the app starts and stays alive. Logcat and screenshots are uploaded either way.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'CI run id whose novalith-release-apk artifact to test'
+        required: true
+      api_level:
+        description: 'Android API level'
+        required: true
+        default: '34'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ inputs.run_id }} -n novalith-release-apk -D apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ inputs.api_level }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash tool/smoke.sh
+
+      - name: Upload logcat and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-result
+          path: smoke/
+          retention-days: 14
