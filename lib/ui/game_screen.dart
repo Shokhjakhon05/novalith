@@ -41,6 +41,10 @@ class GameScreen extends StatefulWidget {
   /// Null = classic endless mode.
   final DailyChallenge? daily;
 
+  /// The debug button is shown only in debug builds; tests that render store screenshots
+  /// switch it off as well.
+  static bool debugTools = kDebugMode;
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -357,7 +361,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 semantic: _model.t('paused'),
                 onTap: () => _setPhase(_Phase.paused),
               ),
-              if (kDebugMode) ...[
+              if (kDebugMode && GameScreen.debugTools) ...[
                 const SizedBox(width: 8),
                 RoundButton(icon: Icons.bug_report_rounded, semantic: 'debug', onTap: _debugPanel),
               ],

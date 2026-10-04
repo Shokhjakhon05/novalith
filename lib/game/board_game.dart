@@ -45,8 +45,11 @@ class _Ring {
 }
 
 class _FloatText {
-  _FloatText(this.painter, this.x, this.y, this.max, this.rise);
+  _FloatText(this.painter, this.x, this.y, this.max, this.rise, this.tag);
   final TextPainter painter;
+
+  /// Texts with the same non-empty tag replace each other (one combo banner at a time).
+  final String tag;
   final double x, y, max, rise;
   double life = 0;
 }
@@ -257,6 +260,7 @@ class BoardGame extends Game {
             22 + math.min(12, e.chain * 2.0),
             0xFFD65A,
             1.0,
+            tag: 'combo',
           );
           _shake = math.max(_shake, 0.12 + e.chain * 0.05);
           model.analytics.log('combo_created', {'chain': e.chain});
@@ -331,7 +335,8 @@ class BoardGame extends Game {
     }
   }
 
-  void _float(String text, double x, double y, double fontSize, int color, double life) {
+  void _float(String text, double x, double y, double fontSize, int color, double life, {String tag = ''}) {
+    if (tag.isNotEmpty) _texts.removeWhere((t) => t.tag == tag);
     if (_texts.length > 24) _texts.removeAt(0);
     final painter = TextPainter(
       text: TextSpan(
@@ -350,7 +355,7 @@ class BoardGame extends Game {
     final half = painter.width / 2;
     final w = core.balance.worldW;
     final cx = x < half + 4 ? half + 4 : (x > w - half - 4 ? w - half - 4 : x);
-    _texts.add(_FloatText(painter, cx, y, life, 34));
+    _texts.add(_FloatText(painter, cx, y, life, 34, tag));
   }
 
   // --- Drawing ---

@@ -29,6 +29,7 @@ import 'package:novalith/ui/widgets.dart';
 
 final String? shotDir = Platform.environment['NOVALITH_PREVIEW_DIR'];
 final _shotKey = GlobalKey();
+double shotPixelRatio = 2;
 
 class Rig {
   Rig({MemorySaveStore? store, bool rewarded = false, bool grant = true, DateTime? now})
@@ -94,7 +95,7 @@ Future<void> shot(WidgetTester tester, String name) async {
   if (shotDir == null) return;
   await tester.runAsync(() async {
     final boundary = _shotKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    final image = await boundary.toImage(pixelRatio: 2);
+    final image = await boundary.toImage(pixelRatio: shotPixelRatio);
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     File('$shotDir/$name.png').writeAsBytesSync(data!.buffer.asUint8List());
   });
@@ -571,6 +572,103 @@ void main() {
     expect(find.text('Play again'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  // Store screenshots: the real screens rendered at 1080x1920. Only produced on request.
+  for (final code in ['en', 'ru']) {
+    testWidgets('store screenshots ($code)', (tester) async {
+      if (Platform.environment['NOVALITH_STORE_SHOTS'] != '1') return;
+      GameScreen.debugTools = false;
+      shotPixelRatio = 3;
+      addTearDown(() {
+        GameScreen.debugTools = true;
+        shotPixelRatio = 2;
+      });
+      final rig = Rig();
+      rig.store.text =
+          (Profile()
+                ..language = code
+                ..tutorialDone = true
+                ..coins = 2450
+                ..level = 7
+                ..xp = 180
+                ..bestScore = 6200
+                ..runs = 42
+                ..totalMerges = 2310
+                ..maxChain = 5
+                ..maxLevel = 9
+                ..discovered = {2, 3, 4, 5, 6, 7, 8, 9}
+                ..achievements = {
+                  'merges_10',
+                  'merges_100',
+                  'merges_1000',
+                  'first_chain',
+                  'chain_5',
+                  'evo_6',
+                  'evo_8',
+                  'score_5k',
+                  'runs_10',
+                }
+                ..owned = {'theme_cosmos', 'bg_deep', 'theme_neon', 'bg_nebula', 'bg_dawn'}
+                ..rewardLastDate = 20261004
+                ..rewardLastUtcMs = DateTime(2026, 10, 4, 12).toUtc().millisecondsSinceEpoch)
+              .encode();
+      await launch(tester, rig, size: const Size(360, 640));
+      final l = rig.model.l10n;
+      await tester.runAsync(
+        () => precacheImage(const AssetImage('assets/brand/logo.png'), tester.element(find.byType(Scaffold).first)),
+      );
+      await frames(tester, 10);
+      await shot(tester, 'store_${code}_3_menu');
+
+      await tapText(tester, l.t('play').toUpperCase());
+      final game = board(tester);
+      final rng = SeededRng(11);
+      var combo = false;
+      var big = false;
+      var frame = 0;
+      while (!game.core.over && frame < 30000) {
+        if (game.core.canDrop && frame % 40 == 0) {
+          game.aimX = game.core.drops < 95 ? greedyBot(game.core, rng) : 170.0;
+          game.release();
+        }
+        final before = game.core.merges;
+        await tester.pump(const Duration(milliseconds: 16));
+        frame++;
+        final merged = game.core.merges > before;
+        if (!combo && merged && game.core.chain >= 3 && game.core.maxLevel >= 6) {
+          await frames(tester, 5);
+          await shot(tester, 'store_${code}_1_combo');
+          combo = true;
+        }
+        if (!big && merged && game.core.maxLevel >= 8 && game.core.bodies.length > 12) {
+          await frames(tester, 4);
+          await shot(tester, 'store_${code}_2_evolve');
+          big = true;
+        }
+      }
+      game.core.score = game.core.score < 6400 ? 7380 : game.core.score;
+      await seconds(tester, 1.4);
+      await frames(tester, 50);
+      await shot(tester, 'store_${code}_4_record');
+      await tapText(tester, l.t('home'));
+
+      final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+      nav.push(MaterialPageRoute<void>(builder: (_) => const CollectionScreen()));
+      await frames(tester, 40);
+      await shot(tester, 'store_${code}_5_collection');
+      nav.pop();
+      await frames(tester, 40);
+      nav.push(MaterialPageRoute<void>(builder: (_) => const ShopScreen()));
+      await frames(tester, 40);
+      await shot(tester, 'store_${code}_6_shop');
+      nav.pop();
+      await frames(tester, 40);
+      await tapText(tester, l.t('daily_title'));
+      await frames(tester, 30);
+      await shot(tester, 'store_${code}_7_daily');
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('corrupted save on disk: the app still starts and stays usable', (tester) async {
     final rig = Rig();
