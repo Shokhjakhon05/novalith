@@ -1,5 +1,7 @@
 # What is left before publishing
 
+The step-by-step Play Console guide with ready answers (in Russian) is `docs/PLAY_CONSOLE.md`.
+
 Everything in the repository is done and builds in CI. These steps need accounts, money or a
 person, so they were left for the owner.
 

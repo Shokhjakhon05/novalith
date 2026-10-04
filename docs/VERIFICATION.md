@@ -91,24 +91,32 @@ evidence either way.
 
 ## CI run
 
-Run **37154607753** on commit `85fa0e5` - all green:
-https://github.com/Shokhjakhon05/novalith/actions/runs/37154607753
+Run **37183789697** on commit `7ef5453` - all three jobs green:
+https://github.com/Shokhjakhon05/novalith/actions/runs/37183789697
 
 | Step | Result |
 |---|---|
 | `dart format --output=none --set-exit-if-changed .` | Pass |
 | `flutter analyze` | Pass, no issues |
-| `flutter test` with `NOVALITH_GAMES=1000` (128 tests) | Pass |
+| `flutter test` with `NOVALITH_GAMES=1000` | Pass |
 | `flutter build apk --release` | Pass - 53.8 MB universal APK (three ABIs) |
-| `flutter build appbundle --release` | Pass - 55.7 MB bundle |
+| `flutter build appbundle --release` | Pass - 55.8 MB bundle, versionCode 6 |
 | Debug panel strings absent from `libapp.so` | Pass |
+| Emulator (Android 14, x86_64): install, launch, play, pause, background, resume | Pass - process alive, no fatal exception from the app |
 
-Checked on the downloaded APK: package `com.novalith.game`; AdMob app id is Google's test id;
-permissions INTERNET, AD_ID and BILLING come from the ads and billing plugins; all 20 audio
-files, the font and the logo are inside; native libraries are aligned for 16 KB pages.
+Checked on the downloaded artifacts: package `com.novalith.game`; signed with the Novalith
+upload key (not the debug key); the manifest carries the production AdMob app id and the binary
+the two production ad unit ids; native libraries are aligned for 16 KB pages.
 
-Commits after `85fa0e5` change documentation only.
+## The launch crash of 4 October 2026
 
-The artifacts are signed with the **debug key** and use **test ads**, because no keystore or
-ad ids are configured yet (see `RELEASE_STEPS.md`). They install and run, but cannot be
-uploaded to Google Play as they are.
+The first APK crashed on a real phone before its first frame. An emulator run reproduced it:
+`Failed to create an instance of androidx.work.impl.WorkDatabase` inside
+`androidx.startup.InitializationProvider`. R8 had removed the constructor of the Room database
+that WorkManager (pulled in by the ads SDK) creates by reflection at process start. Fixed with
+keep rules in `android/app/proguard-rules.pro`. None of the earlier checks could see this -
+unit and widget tests do not run the shrunk Android binary - so the pipeline now installs and
+launches every built APK on an emulator.
+
+Still **not checked**: a physical phone after the fix, real ads, the consent form, the purchase,
+audio by ear, non-Latin fonts on a device.
