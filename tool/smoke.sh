@@ -62,6 +62,11 @@ sleep 2
 tap 50 71          # PLAY: the first campaign level
 sleep 4
 adb exec-out screencap -p > smoke/5_level_start.png || true
+for y in 76 79 82 86; do
+  tap 50 $y        # "how to play" card of a first run: its button sits at one of these heights
+  sleep 1
+done
+adb exec-out screencap -p > smoke/5b_intro_closed.png || true
 for x in 20 22 50 52 80 78 35 36 65 64 50 20; do
   tap $x 60        # aim and drop in the board (later taps may land on the result card)
   sleep 1

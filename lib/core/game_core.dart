@@ -124,6 +124,11 @@ class GameCore {
   int get nextPiece => spawner.next;
   bool get canDrop => !over && cooldown <= 0 && (dropLimit == 0 || drops < dropLimit);
   int get dropsLeft => dropLimit == 0 ? -1 : dropLimit - drops;
+
+  /// The last piece of a drop-limited run is out: all that is left is for the pile to settle.
+  bool get windingDown => !over && dropLimit > 0 && drops >= dropLimit;
+
+  double get sinceLastDrop => time - _lastDropTime;
   bool get canContinue => over && endReason == EndReason.overflow && continuesUsed < balance.continuesPerRun;
   int get comboMultiplier => balance.comboMultiplier(chain);
 

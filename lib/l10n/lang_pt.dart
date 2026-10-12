@@ -124,4 +124,9 @@ const Map<String, String> pt = {
   'ach_weekly': 'Conclua {n} metas semanais',
   'fewest_drops': 'Menos lançamentos: {n}',
   'campaign_done': 'Campanha concluída',
+  'counting': 'Contando o resultado…',
+  'how_title': 'Como jogar',
+  'how_1': 'Deslize para mirar e solte para lançar',
+  'how_2': 'Dois corpos iguais se fundem no próximo, maior',
+  'how_3': 'Crie o maior corpo que puder e marque pontos. Não deixe a pilha passar da linha!',
 };

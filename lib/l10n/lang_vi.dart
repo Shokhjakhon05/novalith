@@ -124,4 +124,9 @@ const Map<String, String> vi = {
   'ach_weekly': 'Hoàn thành {n} mục tiêu tuần',
   'fewest_drops': 'Ít lần thả nhất: {n}',
   'campaign_done': 'Hoàn thành chiến dịch',
+  'counting': 'Đang tính kết quả…',
+  'how_title': 'Cách chơi',
+  'how_1': 'Vuốt để ngắm, nhấc tay để thả',
+  'how_2': 'Hai thiên thể giống nhau hợp thành thiên thể kế tiếp, lớn hơn',
+  'how_3': 'Tạo thiên thể lớn nhất và ghi điểm. Đừng để chồng vượt quá vạch!',
 };

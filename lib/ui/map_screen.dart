@@ -48,7 +48,8 @@ class _MapScreenState extends State<MapScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_scroll != null) return;
-    // Open on the level the player is at, a little below the top of the screen.
+    // The map climbs from the bottom up, so offsets are measured from the bottom edge:
+    // open on the level the player is at, with the levels ahead in view above it.
     final model = AppScope.of(context);
     final at = model.nextCampaignLevel ?? campaignLevels.last;
     _scroll = ScrollController(initialScrollOffset: math.max(0, _offsetOf(at.id) - 220));
@@ -121,7 +122,8 @@ class _MapScreenState extends State<MapScreen> {
           Expanded(
             child: ListView.builder(
               controller: _scroll,
-              padding: const EdgeInsets.only(bottom: 40),
+              reverse: true,
+              padding: const EdgeInsets.only(top: 40, bottom: 12),
               itemCount: _rows.length,
               itemBuilder: (context, i) {
                 final row = _rows[i];
@@ -241,7 +243,7 @@ class _LevelRow extends StatelessWidget {
                   child: CustomPaint(
                     painter: _PathPainter(
                       Offset(x, _rowHeight / 2),
-                      Offset(_nodeX(next!.index) * w, _rowHeight * 1.5),
+                      Offset(_nodeX(next!.index) * w, -_rowHeight * 0.5),
                       stars > 0 ? accent : const Color(0x40FFFFFF),
                     ),
                   ),

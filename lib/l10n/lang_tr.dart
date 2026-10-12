@@ -124,4 +124,9 @@ const Map<String, String> tr = {
   'ach_weekly': '{n} haftalık hedef tamamla',
   'fewest_drops': 'En az bırakış: {n}',
   'campaign_done': 'Sefer tamamlandı',
+  'counting': 'Sonuç hesaplanıyor…',
+  'how_title': 'Nasıl oynanır',
+  'how_1': 'Nişan almak için kaydır, bırakmak için parmağını kaldır',
+  'how_2': 'İki aynı cisim birleşip bir sonraki, daha büyük cisme dönüşür',
+  'how_3': 'En büyük cismi oluştur ve puan topla. Yığının çizgiyi aşmasına izin verme!',
 };

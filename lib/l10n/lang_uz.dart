@@ -124,4 +124,9 @@ const Map<String, String> uz = {
   'ach_weekly': '{n} ta haftalik maqsadni bajaring',
   'fewest_drops': 'Eng kam tashlash: {n}',
   'campaign_done': 'Kampaniya oʻtildi',
+  'counting': 'Natija hisoblanmoqda…',
+  'how_title': 'Qanday oʻynaladi',
+  'how_1': 'Moʻljalga olish uchun barmoqni suring, tashlash uchun qoʻyib yuboring',
+  'how_2': 'Ikkita bir xil jism qoʻshilib, keyingi kattaroq jismga aylanadi',
+  'how_3': 'Eng katta jismni yarating va ochko toʻplang. Uyum chiziqdan oshib ketmasin!',
 };

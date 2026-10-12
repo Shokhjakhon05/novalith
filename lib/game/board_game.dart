@@ -181,8 +181,14 @@ class BoardGame extends Game {
 
     // The last moments before overflow play in slow motion: tension, and a last chance.
     final slow = core.overflow > 0.55 ? 1 - 0.62 * ((core.overflow - 0.55) / 0.45).clamp(0.0, 1.0) : 1.0;
-    core.advance(frame, timeScale: slow);
-    _drain();
+    // After the last drop the player can only wait for the pile to settle. Once the piece has
+    // landed that wait is fast-forwarded: the same physics steps, so the same result, sooner.
+    final hurry = core.windingDown && core.overflow <= 0 && core.sinceLastDrop > 1.0 ? 4 : 1;
+    for (var i = 0; i < hurry; i++) {
+      core.advance(frame, timeScale: slow);
+      _drain();
+      if (core.over) break;
+    }
 
     _ready = core.canDrop ? math.min(1, _ready + frame * 7) : 0;
     _shake = math.max(0, _shake - frame * 3.2);
@@ -552,16 +558,16 @@ class BoardGame extends Game {
           style: const TextStyle(
             fontFamily: 'Exo2',
             fontSize: 40,
-            fontWeight: FontWeight.w800,
-            fontVariations: [ui.FontVariation('wght', 800)],
-            color: Color(0xFFFFFFFF),
-            shadows: [Shadow(color: Color(0xFF000000), blurRadius: 8)],
+            fontWeight: FontWeight.w600,
+            fontVariations: [ui.FontVariation('wght', 600)],
+            color: Color(0xE6FFFFFF),
+            shadows: [Shadow(color: Color(0xB3000000), blurRadius: 6)],
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout(),
     );
-    final k = o.r * 0.82 / 40;
+    final k = o.r * 0.58 / 40;
     canvas.save();
     canvas.translate(o.x, o.y);
     canvas.scale(k);

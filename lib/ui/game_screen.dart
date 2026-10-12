@@ -18,7 +18,7 @@ import '../services/feedback.dart';
 import 'campaign_widgets.dart';
 import 'widgets.dart';
 
-enum _Phase { playing, paused, continuePrompt, results }
+enum _Phase { intro, playing, paused, continuePrompt, results }
 
 String achievementText(AppModel m, Achievement a) => switch (a.stat) {
   Stat.totalMerges => m.t('ach_merges', {'n': formatNumber(a.target)}),
@@ -108,6 +108,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         ..onRunEnded = _onRunEnded;
       game.startRun(game.core);
       _tutorial = _model.profile.tutorialDone ? 3 : 0;
+      // A first-time player is told what the game is about before anything moves.
+      if (_tutorial == 0) {
+        _phase = _Phase.intro;
+        game.paused = true;
+      }
       _announceLevel();
     }
   }
@@ -184,6 +189,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       if (level != null && !level.byScore && !game.core.over && level.passed(game.core, master: _master)) {
         game.core.complete();
       }
+      // The daily challenge has nothing more to give once its target is reached.
+      final daily = widget.daily;
+      if (daily != null && !game.core.over && daily.completed(game.core)) game.core.complete();
       if (_tutorial < 3) {
         setState(() => _tutorial = 3);
         _model.completeTutorial();
@@ -339,6 +347,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _onBack() {
     switch (_phase) {
+      case _Phase.intro:
+        _setPhase(_Phase.playing);
       case _Phase.playing:
         _setPhase(_Phase.paused);
       case _Phase.paused:
@@ -394,6 +404,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             SafeArea(child: _hud()),
             if (_banner.isNotEmpty) _bannerView(media),
             if (_phase == _Phase.playing && _tutorial < 3) _tutorialHint(media),
+            if (_phase == _Phase.playing) _countingView(media),
+            if (_phase == _Phase.intro) _overlay(_howToPlayPanel()),
             if (_phase == _Phase.paused) _overlay(_pausePanel()),
             if (_phase == _Phase.continuePrompt) _overlay(_continuePanel()),
             if (_phase == _Phase.results) _overlay(_level != null ? _levelResults() : _resultsPanel()),
@@ -618,6 +630,102 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Shown from the last drop until the result: the pile is still settling, and the player
+  /// should see that the game is counting rather than stuck.
+  Widget _countingView(MediaQueryData media) {
+    return Positioned(
+      left: 24,
+      right: 24,
+      bottom: media.padding.bottom + 70,
+      child: IgnorePointer(
+        child: ValueListenableBuilder<int>(
+          valueListenable: game.dropsLeft,
+          builder: (context, left, _) {
+            if (left != 0) return const SizedBox.shrink();
+            return Center(
+              child: GlassPanel(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2.4, color: Palette.cyan),
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(_model.t('counting'), style: ts(15, weight: 700), textAlign: TextAlign.center),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// What the game is about, in three pictures. Opens by itself before the first run and
+  /// from the pause menu afterwards.
+  Widget _howToPlayPanel() {
+    Widget step(Widget picture, String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        children: [
+          SizedBox(width: 92, height: 54, child: Center(child: picture)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text, style: ts(14.5, weight: 600, color: Palette.text, height: 1.25)),
+          ),
+        ],
+      ),
+    );
+    return GlassPanel(
+      solid: true,
+      padding: const EdgeInsets.all(22),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(_model.t('how_title'), style: ts(26, weight: 800), textAlign: TextAlign.center),
+            const SizedBox(height: 18),
+            step(const Icon(Icons.swipe_rounded, color: Palette.cyan, size: 40), _model.t('how_1')),
+            step(
+              const FittedBox(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OrbView(level: 2, size: 30),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 2),
+                      child: Icon(Icons.add_rounded, color: Palette.dim, size: 16),
+                    ),
+                    OrbView(level: 2, size: 30),
+                    Icon(Icons.arrow_right_alt_rounded, color: Palette.gold, size: 22),
+                    OrbView(level: 3, size: 40),
+                  ],
+                ),
+              ),
+              _model.t('how_2'),
+            ),
+            step(const Icon(Icons.vertical_align_top_rounded, color: Palette.gold, size: 40), _model.t('how_3')),
+            const SizedBox(height: 6),
+            GameButton(
+              key: const ValueKey('how-ok'),
+              label: _model.t('play'),
+              icon: Icons.play_arrow_rounded,
+              primary: true,
+              onTap: () => _setPhase(_Phase.playing),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _tutorialHint(MediaQueryData media) {
     final key = const ['tut_aim', 'tut_drop', 'tut_merge'][_tutorial];
     return Positioned(
@@ -693,6 +801,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 12),
             GameButton(label: _model.t('restart'), icon: Icons.refresh_rounded, onTap: _playAgain),
+            const SizedBox(height: 12),
+            GameButton(
+              label: _model.t('how_title'),
+              icon: Icons.help_outline_rounded,
+              onTap: () => _setPhase(_Phase.intro),
+            ),
             const SizedBox(height: 12),
             GameButton(
               label: _model.t(widget.exitLabel),

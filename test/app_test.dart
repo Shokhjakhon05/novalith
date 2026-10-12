@@ -109,7 +109,16 @@ Future<void> shot(WidgetTester tester, String name) async {
 
 BoardGame board(WidgetTester tester) => tester.widget<GameWidget<BoardGame>>(find.byType(GameWidget<BoardGame>)).game!;
 
+/// Closes the "how to play" card a first-time player gets before the first run.
+Future<void> closeIntro(WidgetTester tester) async {
+  final ok = find.byKey(const ValueKey('how-ok'));
+  if (ok.evaluate().isEmpty) return;
+  await tester.tap(ok);
+  await frames(tester, 20);
+}
+
 Future<void> dropAt(WidgetTester tester, double x) async {
+  await closeIntro(tester);
   final g = await tester.startGesture(Offset(x, 500));
   await tester.pump(const Duration(milliseconds: 16));
   await g.moveTo(Offset(x + 2, 500));
@@ -118,9 +127,12 @@ Future<void> dropAt(WidgetTester tester, double x) async {
   await seconds(tester, 0.6);
 }
 
-Future<void> tapText(WidgetTester tester, String text) async {
+/// Taps a label. A tap that starts a first-time player's game also closes the "how to play"
+/// card, unless the test wants to look at it ([intro] = false).
+Future<void> tapText(WidgetTester tester, String text, {bool intro = true}) async {
   await tester.tap(find.text(text).first);
   await frames(tester, 20);
+  if (intro) await closeIntro(tester);
 }
 
 void main() {
@@ -650,7 +662,11 @@ void main() {
       expect(find.text(l.t('play').toUpperCase()), findsOneWidget);
       if (lang.code == 'ru' || lang.code == 'ar' || lang.code == 'zh') await shot(tester, 'menu_${lang.code}');
 
-      await tapText(tester, l.t('endless'));
+      await tapText(tester, l.t('endless'), intro: false);
+      expect(find.text(l.t('how_title')), findsOneWidget);
+      expect(find.text(l.t('how_3')), findsOneWidget);
+      if (lang.code == 'ru' || lang.code == 'ar' || lang.code == 'de') await shot(tester, 'how_${lang.code}');
+      await closeIntro(tester);
       expect(find.text(l.t('tut_aim')), findsOneWidget);
       final game = board(tester);
       await dropAt(tester, 100);

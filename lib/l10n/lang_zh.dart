@@ -124,4 +124,9 @@ const Map<String, String> zh = {
   'ach_weekly': '完成 {n} 个每周目标',
   'fewest_drops': '最少投放：{n}',
   'campaign_done': '战役已完成',
+  'counting': '正在计算结果…',
+  'how_title': '玩法说明',
+  'how_1': '滑动瞄准，松手投下',
+  'how_2': '两个相同的天体会合并成下一个更大的天体',
+  'how_3': '合成最大的天体并获得分数。别让堆叠超过警戒线！',
 };

@@ -125,4 +125,9 @@ const Map<String, String> fr = {
   'ach_weekly': 'Terminez {n} objectifs de la semaine',
   'fewest_drops': 'Moins de lancers : {n}',
   'campaign_done': 'Campagne terminée',
+  'counting': 'Calcul du résultat…',
+  'how_title': 'Comment jouer',
+  'how_1': 'Glissez pour viser, relâchez pour lancer',
+  'how_2': 'Deux corps identiques fusionnent en un corps plus grand',
+  'how_3': 'Créez le plus grand corps possible et marquez des points. Ne laissez pas la pile dépasser la ligne !',
 };

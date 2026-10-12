@@ -69,7 +69,7 @@ class Balance {
     this.interstitialEveryRuns = 3,
     this.interstitialCooldownSec = 120,
     this.interstitialAfterRewardedSec = 60,
-    this.interstitialSkipFirstRuns = 2,
+    this.interstitialSkipFirstRuns = 5,
     this.dailyRewardCoins = const [20, 30, 40, 60, 80, 100, 200],
     this.dailyCompleteCoins = 60,
     this.settleSpeed = 14,

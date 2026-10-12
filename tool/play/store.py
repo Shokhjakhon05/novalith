@@ -25,7 +25,7 @@ PKG = 'com.novalith.game'
 B = f'https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{PKG}'
 U = f'https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/{PKG}'
 STORE = os.path.join(ROOT, 'docs', 'store')
-# Screenshots exist in English and Russian; every other language shows the default (English).
+# Screenshots exist in English and Russian (built by tool/frame_shots.py); other languages show English.
 SHOT_DIRS = {'en-US': 'en', 'ru-RU': 'ru'}
 COMMIT = '--commit' in sys.argv
 

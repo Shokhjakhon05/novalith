@@ -124,4 +124,9 @@ const Map<String, String> de = {
   'ach_weekly': 'Erreiche {n} Wochenziele',
   'fewest_drops': 'Wenigste Würfe: {n}',
   'campaign_done': 'Kampagne abgeschlossen',
+  'counting': 'Ergebnis wird gezählt…',
+  'how_title': 'So wird gespielt',
+  'how_1': 'Zum Zielen wischen, zum Fallenlassen loslassen',
+  'how_2': 'Zwei gleiche Körper verschmelzen zum nächsten, größeren',
+  'how_3': 'Erschaffe den größten Körper und sammle Punkte. Der Stapel darf die Linie nicht überschreiten!',
 };

@@ -66,6 +66,24 @@ level and master challenge, rewards exactly once, locked levels, clock tricks, m
 damaged saves), campaign flows in `test/app_test.dart`, and the emulator smoke test now opens
 every screen and plays a level.
 
+## M7 - First tester feedback (1.1.1)
+
+A closed-test player's notes (2026-10-12) and what was done about them:
+
+- "No onboarding": a three-step "how to play" card opens before a first run and from the pause
+  menu; the three in-game hints follow it as before.
+- "Too many ads": the first 5 runs are ad free (was 2). The length of an interstitial is set in
+  AdMob, not in the game.
+- "Nothing happens after the last piece": every drop-limited run used to sit out the full 6 s
+  cap (the pile never gets under `settleSpeed`). That wait is now fast-forwarded 4x once the
+  piece has landed - the same physics steps, so the bot-proved level data is untouched - and a
+  "counting" note is shown. Cutting the wait short instead was tried and changed level results.
+- "Daily goal reached but the round goes on": the daily challenge now ends on the merge that
+  reaches its target.
+- "Numbers stick out": they stay off by default; the digits are smaller and lighter.
+- "The map runs top to bottom": it now climbs from the bottom up.
+- "The shop is thin": not addressed in this build.
+
 ## Not done / open
 
 - The campaign was balanced against the bot, not against people: real players may find single

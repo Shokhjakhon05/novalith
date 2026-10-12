@@ -124,4 +124,9 @@ const Map<String, String> id = {
   'ach_weekly': 'Selesaikan {n} target mingguan',
   'fewest_drops': 'Jatuhan paling sedikit: {n}',
   'campaign_done': 'Kampanye selesai',
+  'counting': 'Menghitung hasil…',
+  'how_title': 'Cara bermain',
+  'how_1': 'Geser untuk membidik, lepas untuk menjatuhkan',
+  'how_2': 'Dua benda yang sama bergabung menjadi benda berikutnya yang lebih besar',
+  'how_3': 'Buat benda terbesar dan kumpulkan skor. Jangan biarkan tumpukan melewati garis!',
 };

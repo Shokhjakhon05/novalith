@@ -124,4 +124,9 @@ const Map<String, String> en = {
   'ach_weekly': 'Complete {n} weekly goals',
   'fewest_drops': 'Fewest drops: {n}',
   'campaign_done': 'Campaign complete',
+  'counting': 'Counting the result…',
+  'how_title': 'How to play',
+  'how_1': 'Slide your finger to aim, release to drop',
+  'how_2': 'Two identical bodies merge into the next, bigger one',
+  'how_3': "Grow the biggest body you can and score points. Don't let the pile rise above the line!",
 };
